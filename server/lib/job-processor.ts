@@ -1,0 +1,281 @@
+import { storage } from "../storage";
+
+// Configuration for self-healing
+const PROCESSOR_CONFIG = {
+  MAX_RETRIES: 3,
+  RETRY_DELAY_MS: 1000,
+  BATCH_SIZE: 50,
+  STALE_JOB_THRESHOLD_MS: 5 * 60 * 1000, // 5 minutes
+} as const;
+
+// Exponential backoff helper
+function getRetryDelay(retryCount: number): number {
+  return PROCESSOR_CONFIG.RETRY_DELAY_MS * Math.pow(2, retryCount);
+}
+
+// Sleep helper
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Calculate data quality score
+function calculateDataQualityScore(data: Record<string, string | null | undefined>): number {
+  let score = 0;
+  const weights = {
+    email: 30,
+    phone: 20,
+    firstName: 15,
+    lastName: 15,
+    company: 10,
+    title: 5,
+    linkedinUrl: 5,
+  };
+
+  for (const [field, weight] of Object.entries(weights)) {
+    if (data[field] && data[field]!.trim()) {
+      score += weight;
+    }
+  }
+
+  return score;
+}
+
+// Process a single job item with retry logic
+async function processItem(
+  item: {
+    id: string;
+    parsedData: Record<string, string> | null;
+    retryCount: number | null;
+  }
+): Promise<{ success: boolean; isDuplicate: boolean; error?: string }> {
+  const data = item.parsedData;
+  
+  if (!data) {
+    return { success: false, isDuplicate: false, error: "No parsed data available" };
+  }
+
+  // Validate we have at least one identifier
+  if (!data.email && !data.phone && !data.linkedinUrl) {
+    return { success: false, isDuplicate: false, error: "Missing required identifier (email, phone, or LinkedIn URL)" };
+  }
+
+  // Check for duplicates by email
+  if (data.email) {
+    const existing = await storage.getContactByEmail(data.email);
+    if (existing) {
+      await storage.updateBulkJobItem(item.id, {
+        status: "complete",
+        contactId: existing.id,
+        matchedContactId: existing.id,
+        matchConfidence: "100",
+      });
+      return { success: true, isDuplicate: true };
+    }
+  }
+
+  // Create company if needed
+  let companyId: string | null = null;
+  if (data.company) {
+    const company = await storage.upsertCompany({
+      name: data.company,
+      domain: data.companyDomain || null,
+    });
+    companyId = company.id;
+  }
+
+  // Calculate data quality score
+  const qualityScore = calculateDataQualityScore(data);
+
+  // Create contact with validated data
+  const contact = await storage.createContact({
+    email: data.email || null,
+    phone: data.phone || null,
+    firstName: data.firstName || null,
+    lastName: data.lastName || null,
+    title: data.title || null,
+    companyId,
+    linkedinUrl: data.linkedinUrl || null,
+    dataQualityScore: String(qualityScore),
+  });
+
+  await storage.updateBulkJobItem(item.id, {
+    status: "complete",
+    contactId: contact.id,
+    companyId,
+    fitScore: String(qualityScore),
+  });
+
+  return { success: true, isDuplicate: false };
+}
+
+// Main job processor with self-healing
+export async function processJobItems(jobId: string): Promise<void> {
+  try {
+    const items = await storage.getBulkJobItems(jobId);
+    let successful = 0;
+    let failed = 0;
+    let duplicates = 0;
+    let processed = 0;
+
+    // Update job to processing state
+    await storage.updateBulkJob(jobId, { 
+      status: "processing",
+      startedAt: new Date(),
+    });
+
+    for (const item of items) {
+      // Skip already completed items (self-healing for resumed jobs)
+      if (item.status === "complete") {
+        successful++;
+        processed++;
+        continue;
+      }
+
+      // Skip permanently failed items
+      if (item.status === "failed" && (item.retryCount || 0) >= PROCESSOR_CONFIG.MAX_RETRIES) {
+        failed++;
+        processed++;
+        continue;
+      }
+
+      // Update item status to processing
+      await storage.updateBulkJobItem(item.id, { status: "processing" });
+
+      let lastError: string | undefined;
+      let itemSucceeded = false;
+      const currentRetries = item.retryCount || 0;
+
+      // Retry loop with exponential backoff
+      for (let attempt = currentRetries; attempt < PROCESSOR_CONFIG.MAX_RETRIES; attempt++) {
+        try {
+          const result = await processItem({
+            id: item.id,
+            parsedData: item.parsedData as Record<string, string> | null,
+            retryCount: attempt,
+          });
+
+          if (result.success) {
+            itemSucceeded = true;
+            if (result.isDuplicate) {
+              duplicates++;
+            }
+            successful++;
+            break;
+          } else if (result.error) {
+            lastError = result.error;
+          }
+        } catch (err) {
+          lastError = err instanceof Error ? err.message : "Unknown error";
+          
+          // Wait before retry with exponential backoff
+          if (attempt < PROCESSOR_CONFIG.MAX_RETRIES - 1) {
+            await sleep(getRetryDelay(attempt));
+          }
+        }
+      }
+
+      if (!itemSucceeded) {
+        failed++;
+        await storage.updateBulkJobItem(item.id, {
+          status: "failed",
+          lastError: lastError || "Max retries exceeded",
+          retryCount: PROCESSOR_CONFIG.MAX_RETRIES,
+        });
+      }
+
+      processed++;
+
+      // Update progress periodically
+      if (processed % 10 === 0 || processed === items.length) {
+        const progress = Math.round((processed / items.length) * 100);
+        await storage.updateBulkJob(jobId, {
+          progress,
+          successful,
+          failed,
+          duplicatesFound: duplicates,
+        });
+      }
+    }
+
+    // Update job status to complete
+    await storage.updateBulkJob(jobId, {
+      status: "complete",
+      successful,
+      failed,
+      duplicatesFound: duplicates,
+      completedAt: new Date(),
+      progress: 100,
+    });
+
+  } catch (error) {
+    console.error("Error processing job:", error);
+    await storage.updateBulkJob(jobId, {
+      status: "failed",
+      lastError: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+}
+
+// Self-healing: Recover stale jobs that got stuck in processing
+export async function recoverStaleJobs(): Promise<number> {
+  try {
+    const jobs = await storage.getBulkJobs(100);
+    let recovered = 0;
+
+    for (const job of jobs) {
+      if (job.status === "processing") {
+        const startedAt = job.startedAt ? new Date(job.startedAt).getTime() : 0;
+        const now = Date.now();
+        
+        // If job has been processing for too long, attempt recovery
+        if (now - startedAt > PROCESSOR_CONFIG.STALE_JOB_THRESHOLD_MS) {
+          console.log(`Recovering stale job: ${job.id}`);
+          
+          // Re-process the job (will skip completed items due to self-healing)
+          processJobItems(job.id).catch(console.error);
+          recovered++;
+        }
+      }
+    }
+
+    return recovered;
+  } catch (error) {
+    console.error("Error recovering stale jobs:", error);
+    return 0;
+  }
+}
+
+// Health check for job processor
+export async function getProcessorHealth(): Promise<{
+  healthy: boolean;
+  pendingJobs: number;
+  processingJobs: number;
+  staleJobs: number;
+}> {
+  try {
+    const jobs = await storage.getBulkJobs(100);
+    const now = Date.now();
+    
+    const pendingJobs = jobs.filter(j => j.status === "pending").length;
+    const processingJobs = jobs.filter(j => j.status === "processing").length;
+    const staleJobs = jobs.filter(j => {
+      if (j.status !== "processing") return false;
+      const startedAt = j.startedAt ? new Date(j.startedAt).getTime() : 0;
+      return now - startedAt > PROCESSOR_CONFIG.STALE_JOB_THRESHOLD_MS;
+    }).length;
+
+    return {
+      healthy: staleJobs === 0,
+      pendingJobs,
+      processingJobs,
+      staleJobs,
+    };
+  } catch (error) {
+    return {
+      healthy: false,
+      pendingJobs: 0,
+      processingJobs: 0,
+      staleJobs: 0,
+    };
+  }
+}

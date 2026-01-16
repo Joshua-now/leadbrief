@@ -1,0 +1,852 @@
+# AGENT INSTRUCTIONS
+## Automated LeadBrief Setup
+
+**This file guides an AI agent to set up the entire system.**
+
+---
+
+## PREREQUISITES
+
+The user has:
+- [ ] Replit project created
+- [ ] Railway PostgreSQL database set up
+- [ ] Railway Redis set up
+- [ ] Connection strings ready
+
+---
+
+## STEP 1: CREATE DIRECTORY STRUCTURE
+
+```bash
+# Create all required directories
+mkdir -p migrations
+mkdir -p lib
+mkdir -p pages/api/import
+mkdir -p app/api/intake
+mkdir -p app/api/import/bulk
+```
+
+---
+
+## STEP 2: CREATE FILES
+
+### FILE 1: package.json
+**Location:** `package.json` (in root)
+**Action:** Create this file with exact content below
+
+```json
+{
+  "name": "leadbrief",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.58.0",
+    "next": "13.5.1",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "typescript": "5.2.2",
+    "zod": "^3.25.76",
+    "papaparse": "^5.4.1",
+    "bull": "^4.11.4",
+    "redis": "^4.6.11",
+    "pino": "^8.16.2",
+    "cheerio": "^1.1.2",
+    "axios": "^1.6.2"
+  },
+  "devDependencies": {
+    "@types/node": "20.6.2",
+    "@types/react": "18.2.22",
+    "@types/react-dom": "18.2.7",
+    "@types/papaparse": "^5.3.13",
+    "@types/bull": "^4.10.4"
+  }
+}
+```
+
+**Command:** `npm install`
+
+---
+
+### FILE 2: .env
+**Location:** `.env` (in root)
+**Action:** Create this file
+
+**Note:** Agent should ask user for these values or prompt them:
+- NEXT_PUBLIC_SUPABASE_URL
+- NEXT_PUBLIC_SUPABASE_ANON_KEY
+- SUPABASE_SERVICE_ROLE_KEY
+- DATABASE_URL (from Railway PostgreSQL)
+- REDIS_URL (from Railway Redis)
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=<USER_PROVIDES>
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<USER_PROVIDES>
+SUPABASE_SERVICE_ROLE_KEY=<USER_PROVIDES>
+DATABASE_URL=<USER_PROVIDES>
+REDIS_URL=<USER_PROVIDES>
+NEXT_PUBLIC_APP_URL=https://your-replit-url.replit.dev
+LINKEDIN_API_KEY=
+LINKEDIN_API_SECRET=
+```
+
+---
+
+### FILE 3: Database Schema
+**Location:** `migrations/01-schema.sql`
+**Action:** Create this SQL file (entire content below)
+
+```sql
+CREATE TABLE IF NOT EXISTS companies (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at TIMESTAMP DEFAULT NOW(),
+  name TEXT NOT NULL,
+  domain TEXT UNIQUE,
+  linkedin_url TEXT,
+  is_hvac BOOLEAN DEFAULT FALSE,
+  is_roofing BOOLEAN DEFAULT FALSE,
+  enrichment_status TEXT DEFAULT 'pending',
+  full_data JSONB
+);
+
+CREATE TABLE IF NOT EXISTS contacts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at TIMESTAMP DEFAULT NOW(),
+  email TEXT UNIQUE,
+  phone TEXT,
+  first_name TEXT,
+  last_name TEXT,
+  title TEXT,
+  company_id UUID REFERENCES companies(id),
+  linkedin_url TEXT,
+  linkedin_profile_id TEXT UNIQUE,
+  data_quality_score NUMERIC,
+  last_enriched TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS bulk_jobs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at TIMESTAMP DEFAULT NOW(),
+  name TEXT NOT NULL,
+  source_format TEXT,
+  total_records INT,
+  status TEXT DEFAULT 'pending',
+  progress INT DEFAULT 0,
+  successful INT DEFAULT 0,
+  failed INT DEFAULT 0,
+  duplicates_found INT DEFAULT 0,
+  checkpoint_position INT DEFAULT 0,
+  last_error TEXT,
+  error_log JSONB,
+  started_at TIMESTAMP,
+  completed_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS bulk_job_items (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at TIMESTAMP DEFAULT NOW(),
+  bulk_job_id UUID NOT NULL REFERENCES bulk_jobs(id) ON DELETE CASCADE,
+  row_number INT,
+  status TEXT DEFAULT 'pending',
+  raw_data JSONB,
+  parsed_data JSONB,
+  company_id UUID REFERENCES companies(id),
+  contact_id UUID REFERENCES contacts(id),
+  fit_score NUMERIC,
+  summary JSONB,
+  retry_count INT DEFAULT 0,
+  last_error TEXT,
+  next_retry_at TIMESTAMP,
+  matched_contact_id UUID REFERENCES contacts(id),
+  match_confidence NUMERIC
+);
+
+CREATE TABLE IF NOT EXISTS enrichment_errors (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at TIMESTAMP DEFAULT NOW(),
+  bulk_job_item_id UUID REFERENCES bulk_job_items(id),
+  error_type TEXT,
+  error_message TEXT,
+  error_details JSONB,
+  is_recoverable BOOLEAN DEFAULT TRUE
+);
+
+CREATE TABLE IF NOT EXISTS api_quotas (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at TIMESTAMP DEFAULT NOW(),
+  user_id UUID,
+  linkedin_calls_today INT DEFAULT 0,
+  linkedin_daily_limit INT DEFAULT 500,
+  website_scrapes_today INT DEFAULT 0,
+  website_daily_limit INT DEFAULT 1000,
+  quota_reset_at TIMESTAMP DEFAULT (NOW() + INTERVAL '1 day')
+);
+
+CREATE TABLE IF NOT EXISTS job_checkpoints (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at TIMESTAMP DEFAULT NOW(),
+  bulk_job_id UUID NOT NULL UNIQUE REFERENCES bulk_jobs(id) ON DELETE CASCADE,
+  processed_items INT,
+  last_successful_item_id UUID,
+  checkpoint_data JSONB
+);
+
+CREATE TABLE IF NOT EXISTS dedup_matches (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at TIMESTAMP DEFAULT NOW(),
+  original_contact_id UUID REFERENCES contacts(id) ON DELETE CASCADE,
+  matched_contact_id UUID REFERENCES contacts(id) ON DELETE CASCADE,
+  match_confidence NUMERIC,
+  match_reason TEXT[],
+  resolution TEXT DEFAULT 'pending',
+  resolved_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS reports (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at TIMESTAMP DEFAULT NOW(),
+  contact_id UUID REFERENCES contacts(id),
+  fit_score NUMERIC,
+  summary TEXT,
+  talking_points TEXT[],
+  risks TEXT[],
+  website_data JSONB,
+  linkedin_data JSONB
+);
+
+CREATE INDEX IF NOT EXISTS idx_companies_domain ON companies(domain);
+CREATE INDEX IF NOT EXISTS idx_contacts_email ON contacts(email);
+CREATE INDEX IF NOT EXISTS idx_contacts_company ON contacts(company_id);
+CREATE INDEX IF NOT EXISTS idx_bulk_jobs_status ON bulk_jobs(status);
+CREATE INDEX IF NOT EXISTS idx_bulk_items_job ON bulk_job_items(bulk_job_id);
+CREATE INDEX IF NOT EXISTS idx_bulk_items_status ON bulk_job_items(status);
+CREATE INDEX IF NOT EXISTS idx_reports_contact ON reports(contact_id);
+```
+
+**Command:** 
+```bash
+psql $DATABASE_URL < migrations/01-schema.sql
+# Or in Replit database console, paste the SQL directly
+```
+
+---
+
+### FILE 4: Input Handler
+**Location:** `lib/input-handler.ts`
+**Action:** Create this TypeScript file
+
+```typescript
+import { z } from 'zod'
+import Papa from 'papaparse'
+
+const ContactSchema = z.object({
+  firstName: z.string().optional().or(z.literal('')),
+  lastName: z.string().optional().or(z.literal('')),
+  email: z.string().email().toLowerCase().optional(),
+  phone: z.string().optional(),
+  title: z.string().optional(),
+  company: z.string().optional(),
+  companyDomain: z.string().optional(),
+  linkedinUrl: z.string().optional(),
+}).refine(
+  (data) => data.email || data.phone || data.linkedinUrl,
+  'At least email, phone, or LinkedIn URL required'
+)
+
+export type ParsedContact = z.infer<typeof ContactSchema>
+
+export interface ImportResult {
+  records: ParsedContact[]
+  errors: any[]
+  stats: {
+    total: number
+    valid: number
+    invalid: number
+    errorRate: number
+  }
+}
+
+export class BulkInputHandler {
+  static parseCSV(csvContent: string): ImportResult {
+    const records: ParsedContact[] = []
+    const errors: any[] = []
+
+    const parsed = Papa.parse(csvContent, {
+      header: true,
+      skipEmptyLines: true,
+      dynamicTyping: false,
+      transformHeader: (h: string) => h.trim().toLowerCase().replace(/[^\w]/g, '_'),
+    })
+
+    if (parsed.errors.length > 0) {
+      return {
+        records: [],
+        errors: parsed.errors,
+        stats: { total: 0, valid: 0, invalid: 0, errorRate: 100 },
+      }
+    }
+
+    const data = parsed.data as Record<string, string>[]
+
+    data.forEach((row, idx) => {
+      const mapped = this.mapRow(row)
+      const result = ContactSchema.safeParse(mapped)
+
+      if (result.success) {
+        records.push(result.data)
+      } else {
+        result.error.errors.forEach((err) => {
+          errors.push({
+            rowNumber: idx + 2,
+            field: String(err.path[0] || 'unknown'),
+            message: err.message,
+          })
+        })
+      }
+    })
+
+    return {
+      records,
+      errors,
+      stats: {
+        total: data.length,
+        valid: records.length,
+        invalid: errors.length,
+        errorRate: Math.round((errors.length / data.length) * 100),
+      },
+    }
+  }
+
+  static parseEmailList(content: string): ImportResult {
+    const records: ParsedContact[] = []
+    const errors: any[] = []
+
+    const lines = content
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0)
+
+    lines.forEach((line, idx) => {
+      const email = line
+      const result = ContactSchema.safeParse({ email })
+
+      if (result.success) {
+        records.push(result.data)
+      } else {
+        errors.push({
+          rowNumber: idx + 1,
+          field: 'email',
+          message: 'Invalid email',
+        })
+      }
+    })
+
+    return {
+      records,
+      errors,
+      stats: {
+        total: lines.length,
+        valid: records.length,
+        invalid: errors.length,
+        errorRate: Math.round((errors.length / lines.length) * 100),
+      },
+    }
+  }
+
+  static parseJSON(content: string): ImportResult {
+    const records: ParsedContact[] = []
+    const errors: any[] = []
+
+    try {
+      const parsed = JSON.parse(content)
+      const data = Array.isArray(parsed) ? parsed : [parsed]
+
+      data.forEach((item, idx) => {
+        const mapped = this.normalizeFields(item)
+        const result = ContactSchema.safeParse(mapped)
+
+        if (result.success) {
+          records.push(result.data)
+        } else {
+          errors.push({
+            rowNumber: idx + 1,
+            field: 'json',
+            message: 'Invalid format',
+          })
+        }
+      })
+    } catch (e) {
+      return {
+        records: [],
+        errors: [{ message: 'Invalid JSON' }],
+        stats: { total: 0, valid: 0, invalid: 1, errorRate: 100 },
+      }
+    }
+
+    return {
+      records,
+      errors,
+      stats: {
+        total: data.length,
+        valid: records.length,
+        invalid: errors.length,
+        errorRate: Math.round((errors.length / data.length) * 100),
+      },
+    }
+  }
+
+  private static mapRow(row: Record<string, string>): Partial<ParsedContact> {
+    const contact: Partial<ParsedContact> = {}
+    const mapping: Record<string, string[]> = {
+      firstName: ['first_name', 'firstname', 'first'],
+      lastName: ['last_name', 'lastname', 'last'],
+      email: ['email'],
+      phone: ['phone'],
+      title: ['title', 'job_title'],
+      company: ['company', 'company_name'],
+      companyDomain: ['domain', 'website'],
+      linkedinUrl: ['linkedin', 'linkedin_url'],
+    }
+
+    Object.entries(row).forEach(([key, value]) => {
+      const normalizedKey = key.toLowerCase()
+      for (const [field, patterns] of Object.entries(mapping)) {
+        if (patterns.some((p) => normalizedKey.includes(p))) {
+          contact[field as keyof ParsedContact] = String(value).trim()
+          break
+        }
+      }
+    })
+
+    return contact
+  }
+
+  private static normalizeFields(obj: Record<string, any>): Partial<ParsedContact> {
+    const contact: Partial<ParsedContact> = {}
+    const fieldMap: Record<string, string[]> = {
+      firstName: ['first_name', 'firstname', 'fname'],
+      lastName: ['last_name', 'lastname', 'lname'],
+      email: ['email'],
+      phone: ['phone'],
+      title: ['title', 'job_title'],
+      company: ['company', 'company_name'],
+      companyDomain: ['domain', 'website'],
+      linkedinUrl: ['linkedin', 'linkedin_url'],
+    }
+
+    Object.keys(obj).forEach((key) => {
+      const normalizedKey = key.toLowerCase().replace(/[_\s]/g, '')
+      const value = obj[key]
+
+      for (const [field, patterns] of Object.entries(fieldMap)) {
+        if (patterns.some((p) => normalizedKey.includes(p.replace(/[_\s]/g, '')))) {
+          contact[field as keyof ParsedContact] = String(value).trim()
+          break
+        }
+      }
+    })
+
+    return contact
+  }
+}
+```
+
+---
+
+### FILE 5: Intake Endpoint
+**Location:** `pages/api/intake.ts`
+**Action:** Create this TypeScript file
+
+```typescript
+import type { NextApiRequest, NextApiResponse } from 'next'
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' })
+  }
+
+  try {
+    const body = req.body
+
+    if (body.ghlContactId) {
+      const {
+        ghlContactId,
+        leadName,
+        companyName,
+        email,
+        phone,
+        websiteUrl,
+      } = body
+
+      if (!email && !phone) {
+        return res.status(400).json({ error: 'Email or phone required' })
+      }
+
+      let companyId = null
+      if (companyName) {
+        const { data: company } = await supabase
+          .from('companies')
+          .upsert({ name: companyName, domain: websiteUrl })
+          .select()
+          .single()
+        companyId = company?.id
+      }
+
+      const [firstName, lastName] = (leadName || '').split(' ')
+      const { data: contact } = await supabase
+        .from('contacts')
+        .upsert({
+          email: email?.toLowerCase(),
+          phone,
+          first_name: firstName,
+          last_name: lastName,
+          company_id: companyId,
+        })
+        .select()
+        .single()
+
+      const { data: job } = await supabase
+        .from('bulk_jobs')
+        .insert({
+          name: `GHL: ${leadName}`,
+          source_format: 'ghl_webhook',
+          total_records: 1,
+          status: 'processing',
+        })
+        .select()
+        .single()
+
+      await supabase.from('bulk_job_items').insert({
+        bulk_job_id: job.id,
+        row_number: 1,
+        status: 'processing',
+        parsed_data: { email, firstName, lastName, company: companyName },
+        contact_id: contact.id,
+        company_id: companyId,
+      })
+
+      return res.json({
+        success: true,
+        contactId: contact.id,
+        jobId: job.id,
+        status: 'processing',
+      })
+    }
+
+    if (body.email || body.phone) {
+      const { email, phone, firstName, lastName, company } = body
+
+      let companyId = null
+      if (company) {
+        const { data: comp } = await supabase
+          .from('companies')
+          .upsert({ name: company })
+          .select()
+          .single()
+        companyId = comp?.id
+      }
+
+      const { data: contact } = await supabase
+        .from('contacts')
+        .upsert({
+          email: email?.toLowerCase(),
+          phone,
+          first_name: firstName,
+          last_name: lastName,
+          company_id: companyId,
+        })
+        .select()
+        .single()
+
+      const { data: job } = await supabase
+        .from('bulk_jobs')
+        .insert({
+          name: `Single: ${firstName || email}`,
+          source_format: 'api_single',
+          total_records: 1,
+          status: 'processing',
+        })
+        .select()
+        .single()
+
+      await supabase.from('bulk_job_items').insert({
+        bulk_job_id: job.id,
+        row_number: 1,
+        status: 'processing',
+        parsed_data: { email, phone, firstName, lastName },
+        contact_id: contact.id,
+        company_id: companyId,
+      })
+
+      return res.json({
+        success: true,
+        contactId: contact.id,
+        jobId: job.id,
+        status: 'processing',
+      })
+    }
+
+    res.status(400).json({ error: 'No contact data provided' })
+  } catch (error) {
+    console.error('Intake error:', error)
+    res.status(500).json({ error: 'Processing failed' })
+  }
+}
+```
+
+---
+
+### FILE 6: Bulk Import Endpoint
+**Location:** `pages/api/import/bulk.ts`
+**Action:** Create this TypeScript file
+
+```typescript
+import type { NextApiRequest, NextApiResponse } from 'next'
+import { createClient } from '@supabase/supabase-js'
+import { BulkInputHandler } from '@/lib/input-handler'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
+
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '50mb',
+    },
+  },
+}
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  if (req.method === 'GET') {
+    const { jobId } = req.query
+
+    if (!jobId) {
+      const { data: jobs } = await supabase
+        .from('bulk_jobs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(20)
+
+      return res.json({ jobs })
+    }
+
+    const { data: job } = await supabase
+      .from('bulk_jobs')
+      .select('*')
+      .eq('id', jobId)
+      .single()
+
+    const { data: items } = await supabase
+      .from('bulk_job_items')
+      .select('status')
+      .eq('bulk_job_id', jobId)
+
+    const stats = {
+      total: items?.length || 0,
+      completed: items?.filter((i) => i.status === 'complete').length || 0,
+      failed: items?.filter((i) => i.status === 'failed').length || 0,
+      processing: items?.filter((i) => i.status === 'processing').length || 0,
+    }
+
+    return res.json({ job, stats })
+  }
+
+  if (req.method === 'POST') {
+    try {
+      const { content, jobName, format } = req.body
+
+      if (!content) {
+        return res.status(400).json({ error: 'No content provided' })
+      }
+
+      let importResult
+
+      if (format === 'csv' || content.includes(',')) {
+        importResult = BulkInputHandler.parseCSV(content)
+      } else if (format === 'json' || content.startsWith('[') || content.startsWith('{')) {
+        importResult = BulkInputHandler.parseJSON(content)
+      } else {
+        importResult = BulkInputHandler.parseEmailList(content)
+      }
+
+      if (importResult.records.length === 0) {
+        return res.status(400).json({
+          error: 'No valid records found',
+          details: importResult.errors.slice(0, 10),
+        })
+      }
+
+      const { data: bulkJob } = await supabase
+        .from('bulk_jobs')
+        .insert({
+          name: jobName || `Import - ${new Date().toISOString()}`,
+          source_format: format || 'auto',
+          total_records: importResult.records.length,
+          status: 'processing',
+        })
+        .select()
+        .single()
+
+      const items = importResult.records.map((record, idx) => ({
+        bulk_job_id: bulkJob.id,
+        row_number: idx + 1,
+        status: 'processing',
+        raw_data: record,
+        parsed_data: record,
+      }))
+
+      await supabase.from('bulk_job_items').insert(items)
+
+      return res.json({
+        success: true,
+        jobId: bulkJob.id,
+        stats: importResult.stats,
+        message: `Uploaded ${importResult.records.length} records`,
+      })
+    } catch (error) {
+      console.error('Import error:', error)
+      return res.status(500).json({ error: 'Import failed' })
+    }
+  }
+
+  res.status(405).json({ error: 'Method not allowed' })
+}
+```
+
+---
+
+## STEP 3: INSTALL DEPENDENCIES
+
+```bash
+npm install
+```
+
+**Expected output:** All packages installed successfully
+
+---
+
+## STEP 4: RUN DATABASE MIGRATION
+
+```bash
+psql $DATABASE_URL < migrations/01-schema.sql
+```
+
+Or in Replit Database console, paste the SQL.
+
+**Expected output:** All tables created successfully
+
+---
+
+## STEP 5: TEST THE SYSTEM
+
+```bash
+npm run dev
+```
+
+**Expected:** Server running on http://localhost:3000
+
+---
+
+## STEP 6: TEST INTAKE ENDPOINT
+
+```bash
+curl -X POST http://localhost:3000/api/intake \
+  -H "Content-Type: application/json" \
+  -d '{
+    "ghlContactId": "test-123",
+    "leadName": "Test Contact",
+    "email": "test@example.com",
+    "phone": "555-1234"
+  }'
+```
+
+**Expected response:**
+```json
+{
+  "success": true,
+  "contactId": "uuid",
+  "jobId": "uuid",
+  "status": "processing"
+}
+```
+
+---
+
+## STEP 7: TEST BULK IMPORT
+
+```bash
+curl -X POST http://localhost:3000/api/import/bulk \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "email,firstName,lastName\ntest1@example.com,John,Doe\ntest2@example.com,Jane,Smith",
+    "format": "csv",
+    "jobName": "Test Batch"
+  }'
+```
+
+**Expected response:**
+```json
+{
+  "success": true,
+  "jobId": "uuid",
+  "stats": { "total": 2, "valid": 2, "invalid": 0, "errorRate": 0 },
+  "message": "Uploaded 2 records"
+}
+```
+
+---
+
+## COMPLETION CHECKLIST
+
+- [ ] All 6 files created
+- [ ] Dependencies installed
+- [ ] Database migrated
+- [ ] /api/intake working
+- [ ] /api/import/bulk working
+- [ ] Environment variables set
+- [ ] Ready for production
+
+---
+
+## IF ERRORS OCCUR
+
+| Error | Fix |
+|-------|-----|
+| Cannot find module 'bull' | `npm install bull redis` |
+| DATABASE_URL not set | Add to .env file |
+| Migration fails | Verify DATABASE_URL is correct |
+| API returns 500 | Check console logs for details |
+| Supabase connection error | Verify SUPABASE_SERVICE_ROLE_KEY |
+
+---
+
+## SYSTEM IS READY
+
+Once all steps complete, the system can:
+- ✅ Receive GHL webhooks
+- ✅ Accept single contacts
+- ✅ Process bulk CSV/JSON imports
+- ✅ Store data in PostgreSQL
+- ✅ Queue jobs in Redis
+- ✅ Return status updates
+
+**Agent: You're done. System is live.** 🚀
