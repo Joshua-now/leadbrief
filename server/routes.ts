@@ -1,8 +1,15 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
+import multer from "multer";
 import { storage } from "./storage";
 import { BulkInputHandler, IMPORT_LIMITS } from "./lib/input-handler";
 import { processJobItems, recoverStaleJobs, getProcessorHealth } from "./lib/job-processor";
+import { parseFile } from "./lib/file-parser";
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: IMPORT_LIMITS.MAX_FILE_SIZE_MB * 1024 * 1024 },
+});
 
 // Rate limiting store (in-memory for MVP)
 const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
@@ -192,6 +199,76 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Import error:", error);
       res.status(500).json({ error: "Import failed" });
+    }
+  });
+
+  // File upload endpoint for CSV/XLSX imports
+  app.post("/api/import/file", rateLimit(10, 60000), upload.single("file"), async (req: Request, res: Response) => {
+    try {
+      const file = req.file;
+      const jobName = req.body.jobName;
+
+      if (!file) {
+        return res.status(400).json({ error: "No file provided" });
+      }
+
+      console.log(`[Import] File upload: ${file.originalname}, size: ${file.size}, type: ${file.mimetype}`);
+
+      const parseResult = parseFile(file.buffer, file.originalname, file.mimetype);
+
+      if ('error' in parseResult) {
+        console.log(`[Import] Parse error: ${parseResult.error}`);
+        return res.status(parseResult.status).json({ error: parseResult.error });
+      }
+
+      console.log(`[Import] Parsed ${parseResult.importedRows} records from ${parseResult.totalRows} total rows`);
+
+      if (parseResult.importedRows === 0) {
+        return res.status(400).json({
+          error: "No valid records found in file",
+          totalRows: parseResult.totalRows,
+          skippedRows: parseResult.skippedRows,
+          errors: parseResult.errors.slice(0, 20),
+        });
+      }
+
+      // Create bulk job
+      const fileExt = file.originalname.split('.').pop()?.toLowerCase() || 'unknown';
+      const bulkJob = await storage.createBulkJob({
+        name: (jobName || file.originalname.replace(/\.[^/.]+$/, "")).slice(0, 200),
+        sourceFormat: fileExt,
+        totalRecords: parseResult.importedRows,
+        status: "pending",
+      });
+
+      // Create job items using same logic as intake
+      const items = parseResult.records.map((record, idx) => ({
+        bulkJobId: bulkJob.id,
+        rowNumber: idx + 1,
+        status: "pending",
+        rawData: JSON.parse(JSON.stringify(record)),
+        parsedData: JSON.parse(JSON.stringify(record)),
+      }));
+
+      await storage.createBulkJobItems(items);
+
+      // Process items asynchronously
+      processJobItems(bulkJob.id).catch(console.error);
+
+      console.log(`[Import] Created job ${bulkJob.id} with ${items.length} items`);
+
+      res.json({
+        success: true,
+        jobId: bulkJob.id,
+        totalRows: parseResult.totalRows,
+        importedRows: parseResult.importedRows,
+        skippedRows: parseResult.skippedRows,
+        errors: parseResult.errors.slice(0, 20),
+        message: `Imported ${parseResult.importedRows} records from ${file.originalname}`,
+      });
+    } catch (error) {
+      console.error("[Import] File upload error:", error);
+      res.status(500).json({ error: "File import failed" });
     }
   });
 

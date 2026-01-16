@@ -21,8 +21,12 @@ interface ImportStats {
 interface ImportResponse {
   success: boolean;
   jobId: string;
-  stats: ImportStats;
-  warnings: string[];
+  stats?: ImportStats;
+  totalRows?: number;
+  importedRows?: number;
+  skippedRows?: number;
+  errors?: Array<{ row: number; reason: string }>;
+  warnings?: string[];
   message: string;
 }
 
@@ -37,6 +41,7 @@ interface ImportLimits {
 export default function ImportPage() {
   const [content, setContent] = useState("");
   const [jobName, setJobName] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -69,6 +74,44 @@ export default function ImportPage() {
     },
   });
 
+  const fileUploadMutation = useMutation({
+    mutationFn: async (data: { file: File; jobName: string }) => {
+      const formData = new FormData();
+      formData.append("file", data.file);
+      formData.append("jobName", data.jobName);
+      
+      const response = await fetch("/api/import/file", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Upload failed: ${response.statusText}`);
+      }
+      
+      return await response.json() as ImportResponse;
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "File Import Started",
+        description: data.message,
+      });
+      setContent("");
+      setJobName("");
+      setSelectedFile(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "File Import Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -79,6 +122,16 @@ export default function ImportPage() {
     }
   }, []);
 
+  const isBinaryFile = (filename: string): boolean => {
+    const ext = filename.toLowerCase().split('.').pop();
+    return ext === 'xlsx' || ext === 'xls';
+  };
+
+  const isUnsupportedFile = (filename: string): boolean => {
+    const ext = filename.toLowerCase().split('.').pop();
+    return ext === 'pdf' || ext === 'doc' || ext === 'docx' || ext === 'png' || ext === 'jpg' || ext === 'jpeg';
+  };
+
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -87,6 +140,16 @@ export default function ImportPage() {
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0];
       
+      // Check for unsupported file types
+      if (isUnsupportedFile(file.name)) {
+        toast({
+          title: "Unsupported File Type",
+          description: "Please upload a CSV or Excel (.xlsx) file. PDFs and images are not supported.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
       // Check file size
       const sizeMB = file.size / (1024 * 1024);
       if (limits && sizeMB > limits.MAX_FILE_SIZE_MB) {
@@ -98,7 +161,7 @@ export default function ImportPage() {
         return;
       }
       
-      readFile(file);
+      handleFile(file);
     }
   }, [limits, toast]);
 
@@ -106,6 +169,16 @@ export default function ImportPage() {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       
+      // Check for unsupported file types
+      if (isUnsupportedFile(file.name)) {
+        toast({
+          title: "Unsupported File Type",
+          description: "Please upload a CSV or Excel (.xlsx) file. PDFs and images are not supported.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
       // Check file size
       const sizeMB = file.size / (1024 * 1024);
       if (limits && sizeMB > limits.MAX_FILE_SIZE_MB) {
@@ -117,24 +190,30 @@ export default function ImportPage() {
         return;
       }
       
-      readFile(file);
+      handleFile(file);
       if (!jobName) {
         setJobName(file.name.replace(/\.[^/.]+$/, ""));
       }
     }
   }, [jobName, limits, toast]);
 
-  const readFile = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target?.result as string;
-      setContent(text);
-    };
-    reader.readAsText(file);
+  const handleFile = (file: File) => {
+    if (isBinaryFile(file.name)) {
+      setSelectedFile(file);
+      setContent(`[Excel file: ${file.name}]`);
+    } else {
+      setSelectedFile(file);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const text = e.target?.result as string;
+        setContent(text);
+      };
+      reader.readAsText(file);
+    }
   };
 
   const handleSubmit = () => {
-    if (!content.trim()) {
+    if (!content.trim() && !selectedFile) {
       toast({
         title: "No Data",
         description: "Please paste or upload data to import.",
@@ -142,22 +221,43 @@ export default function ImportPage() {
       });
       return;
     }
-    importMutation.mutate({
-      content,
-      jobName: jobName || `Import ${new Date().toLocaleDateString()}`,
-    });
+    
+    if (selectedFile) {
+      fileUploadMutation.mutate({
+        file: selectedFile,
+        jobName: jobName || `Import ${new Date().toLocaleDateString()}`,
+      });
+    } else {
+      importMutation.mutate({
+        content,
+        jobName: jobName || `Import ${new Date().toLocaleDateString()}`,
+      });
+    }
   };
 
-  const detectFormat = (text: string): string => {
+  const detectFormat = (text: string, file: File | null): string => {
+    if (file) {
+      const ext = file.name.toLowerCase().split('.').pop();
+      if (ext === 'xlsx' || ext === 'xls') return "Excel";
+      if (ext === 'csv') return "CSV";
+    }
     const trimmed = text.trim();
+    if (trimmed.startsWith("[Excel file:")) return "Excel";
     if (trimmed.startsWith("[") || trimmed.startsWith("{")) return "JSON";
     if (trimmed.includes(",") && trimmed.split("\n")[0].includes(",")) return "CSV";
     return "Email List";
   };
 
-  const lineCount = content.split("\n").filter(l => l.trim()).length;
-  const format = content ? detectFormat(content) : null;
-  const contentSizeMB = content ? (new Blob([content]).size / (1024 * 1024)).toFixed(2) : "0";
+  const lineCount = selectedFile 
+    ? (selectedFile.name.endsWith('.xlsx') || selectedFile.name.endsWith('.xls') ? 0 : content.split("\n").filter(l => l.trim()).length)
+    : content.split("\n").filter(l => l.trim()).length;
+  const format = (content || selectedFile) ? detectFormat(content, selectedFile) : null;
+  const contentSizeMB = selectedFile 
+    ? (selectedFile.size / (1024 * 1024)).toFixed(2) 
+    : content ? (new Blob([content]).size / (1024 * 1024)).toFixed(2) : "0";
+  const isPending = importMutation.isPending || fileUploadMutation.isPending;
+  const isSuccess = importMutation.isSuccess || fileUploadMutation.isSuccess;
+  const mutationData = fileUploadMutation.data || importMutation.data;
   
   // Validation warnings
   const validationWarnings: string[] = [];
@@ -243,7 +343,7 @@ Limits: ${limits ? `${limits.MAX_RECORDS.toLocaleString()} records, ${limits.MAX
                       </span>
                       <input
                         type="file"
-                        accept=".csv,.json,.txt"
+                        accept=".csv,.json,.txt,.xlsx,.xls"
                         className="hidden"
                         onChange={handleFileInput}
                         data-testid="input-file-upload"
@@ -253,20 +353,20 @@ Limits: ${limits ? `${limits.MAX_RECORDS.toLocaleString()} records, ${limits.MAX
                 )}
               </div>
 
-              {content && (
+              {(content || selectedFile) && (
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <Badge variant="secondary" data-testid="badge-format">
                       {format}
                     </Badge>
                     <span className="text-sm text-muted-foreground" data-testid="text-line-count">
-                      {lineCount.toLocaleString()} line{lineCount !== 1 ? "s" : ""} ({contentSizeMB}MB)
+                      {selectedFile ? selectedFile.name : `${lineCount.toLocaleString()} line${lineCount !== 1 ? "s" : ""}`} ({contentSizeMB}MB)
                     </span>
                   </div>
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => setContent("")}
+                    onClick={() => { setContent(""); setSelectedFile(null); }}
                     data-testid="button-clear"
                   >
                     Clear
@@ -292,10 +392,10 @@ Limits: ${limits ? `${limits.MAX_RECORDS.toLocaleString()} records, ${limits.MAX
                 className="w-full"
                 size="lg"
                 onClick={handleSubmit}
-                disabled={!content.trim() || importMutation.isPending}
+                disabled={(!content.trim() && !selectedFile) || isPending}
                 data-testid="button-start-import"
               >
-                {importMutation.isPending ? (
+                {isPending ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Processing...
@@ -323,6 +423,11 @@ Limits: ${limits ? `${limits.MAX_RECORDS.toLocaleString()} records, ${limits.MAX
                 />
                 <FormatInfo
                   icon={<FileText className="h-4 w-4" />}
+                  title="Excel (.xlsx)"
+                  description="Excel spreadsheet files"
+                />
+                <FormatInfo
+                  icon={<FileText className="h-4 w-4" />}
                   title="JSON"
                   description="Array of contact objects"
                 />
@@ -343,8 +448,9 @@ Limits: ${limits ? `${limits.MAX_RECORDS.toLocaleString()} records, ${limits.MAX
                 <ul className="mt-2 space-y-1">
                   <li>email, firstName, lastName</li>
                   <li>phone, title, company</li>
-                  <li>domain, linkedinUrl</li>
+                  <li>city, websiteUrl, linkedinUrl</li>
                 </ul>
+                <p className="mt-2 text-xs">Header synonyms supported (e.g., "full_name" → firstName)</p>
               </CardContent>
             </Card>
 
@@ -374,7 +480,7 @@ Limits: ${limits ? `${limits.MAX_RECORDS.toLocaleString()} records, ${limits.MAX
           </div>
         </div>
 
-        {importMutation.isSuccess && importMutation.data && (
+        {isSuccess && mutationData && (
           <Card className="border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/30">
             <CardContent className="py-4">
               <div className="flex items-center gap-4">
@@ -384,9 +490,9 @@ Limits: ${limits ? `${limits.MAX_RECORDS.toLocaleString()} records, ${limits.MAX
                     Import queued successfully!
                   </p>
                   <p className="text-sm text-green-700 dark:text-green-300">
-                    {importMutation.data.stats?.valid ?? 0} records ready for processing
-                    {(importMutation.data.stats?.invalid ?? 0) > 0 && 
-                      ` (${importMutation.data.stats?.invalid} invalid rows skipped)`}
+                    {mutationData.importedRows ?? mutationData.stats?.valid ?? 0} records ready for processing
+                    {((mutationData.skippedRows ?? mutationData.stats?.invalid ?? 0) > 0) && 
+                      ` (${mutationData.skippedRows ?? mutationData.stats?.invalid} rows skipped)`}
                   </p>
                 </div>
                 <Button variant="outline" size="sm" asChild>
@@ -394,18 +500,37 @@ Limits: ${limits ? `${limits.MAX_RECORDS.toLocaleString()} records, ${limits.MAX
                 </Button>
               </div>
               
-              {importMutation.data.warnings && importMutation.data.warnings.length > 0 && (
+              {mutationData.errors && mutationData.errors.length > 0 && (
+                <div className="mt-3 rounded-md bg-yellow-100 dark:bg-yellow-900/30 p-3">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-400 mt-0.5" />
+                    <div className="text-sm text-yellow-800 dark:text-yellow-200">
+                      <p className="font-medium">Row errors:</p>
+                      <ul className="mt-1 list-disc list-inside">
+                        {mutationData.errors.slice(0, 5).map((err, i) => (
+                          <li key={i}>Row {err.row}: {err.reason}</li>
+                        ))}
+                        {mutationData.errors.length > 5 && (
+                          <li>...and {mutationData.errors.length - 5} more</li>
+                        )}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {mutationData.warnings && mutationData.warnings.length > 0 && (
                 <div className="mt-3 rounded-md bg-yellow-100 dark:bg-yellow-900/30 p-3">
                   <div className="flex items-start gap-2">
                     <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-400 mt-0.5" />
                     <div className="text-sm text-yellow-800 dark:text-yellow-200">
                       <p className="font-medium">Warnings:</p>
                       <ul className="mt-1 list-disc list-inside">
-                        {importMutation.data.warnings.slice(0, 5).map((w, i) => (
+                        {mutationData.warnings.slice(0, 5).map((w, i) => (
                           <li key={i}>{w}</li>
                         ))}
-                        {importMutation.data.warnings.length > 5 && (
-                          <li>...and {importMutation.data.warnings.length - 5} more</li>
+                        {mutationData.warnings.length > 5 && (
+                          <li>...and {mutationData.warnings.length - 5} more</li>
                         )}
                       </ul>
                     </div>

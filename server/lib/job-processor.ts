@@ -75,10 +75,11 @@ async function processItem(
 
   // Create company if needed
   let companyId: string | null = null;
-  if (data.company) {
+  const companyName = data.company || data.companyName;
+  if (companyName) {
     const company = await storage.upsertCompany({
-      name: data.company,
-      domain: data.companyDomain || null,
+      name: companyName,
+      domain: data.companyDomain || data.websiteUrl || null,
     });
     companyId = company.id;
   }
@@ -86,13 +87,23 @@ async function processItem(
   // Calculate data quality score
   const qualityScore = calculateDataQualityScore(data);
 
+  // Handle name parsing if leadName is provided but firstName/lastName are not
+  let firstName: string | null = data.firstName || null;
+  let lastName: string | null = data.lastName || null;
+  if (!firstName && !lastName && data.leadName) {
+    const nameParts = data.leadName.trim().split(/\s+/);
+    firstName = nameParts[0] || null;
+    lastName = nameParts.slice(1).join(" ") || null;
+  }
+
   // Create contact with validated data
   const contact = await storage.createContact({
     email: data.email || null,
     phone: data.phone || null,
-    firstName: data.firstName || null,
-    lastName: data.lastName || null,
+    firstName: firstName || null,
+    lastName: lastName || null,
     title: data.title || null,
+    city: data.city || null,
     companyId,
     linkedinUrl: data.linkedinUrl || null,
     dataQualityScore: String(qualityScore),
