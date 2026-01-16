@@ -127,3 +127,36 @@ The backend uses a modular route registration pattern with dedicated storage abs
 - **Vite**: Development server and build tool
 - **esbuild**: Server-side bundling for production
 - **TypeScript**: Type checking across the entire codebase
+
+## Deployment Configuration
+
+### Required Environment Variables
+
+For full functionality (with authentication):
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `SESSION_SECRET` | Yes | Secret key for session encryption (generate a secure random string) |
+| `REPL_ID` | For Auth | Client ID for Replit OIDC (auto-set in Replit) |
+| `ISSUER_URL` | Optional | OIDC issuer URL (defaults to https://replit.com/oidc) |
+| `NODE_ENV` | Optional | Set to `production` for production builds |
+| `PORT` | Optional | Server port (defaults to 5000) |
+
+### Graceful Degradation
+
+The application boots successfully even without authentication configured:
+
+- **When REPL_ID is missing**: Auth endpoints return 501 "Authentication not configured"
+- **When SESSION_SECRET is missing**: Falls back to in-memory sessions (not for production)
+- **Protected routes**: Return 501 instead of crashing when auth is disabled
+
+### Railway Deployment
+
+1. Create a PostgreSQL database in Railway
+2. Set the `DATABASE_URL` environment variable
+3. Generate and set `SESSION_SECRET`: `openssl rand -hex 32`
+4. Build command: `npm run build`
+5. Start command: `npm run start`
+
+For Replit Auth on Railway, you'll need to configure OIDC credentials manually since REPL_ID is only available in Replit environments.

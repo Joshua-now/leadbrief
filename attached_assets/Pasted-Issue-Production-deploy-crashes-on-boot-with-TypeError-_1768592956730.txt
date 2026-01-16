@@ -1,0 +1,64 @@
+Issue: Production deploy crashes on boot with:
+
+TypeError: "clientId" must be a non-empty string
+from openid-client during discovery().
+
+What this means:
+Some OAuth/OIDC config is being initialized at startup with a missing/empty CLIENT_ID (or similar env var). The app is trying to configure OpenID authentication (Google/Microsoft/Auth0/etc.) but the required env vars are not set in Railway/Replit production, so openid-client throws and the server dies.
+
+Task: Fix startup so it does NOT crash when OIDC env vars are missing, and configure required env vars properly.
+
+Instructions:
+
+Find where openid-client is used (search for openid-client, discovery(, Issuer.discover, new Configuration, clientId, OIDC, AUTH0, GOOGLE_CLIENT_ID, etc). The stack trace points into compiled output at dist/index.cjs, so find the source file that builds into it.
+
+Identify which environment variables are supposed to provide the client id/secret/issuer (examples: OIDC_CLIENT_ID, AUTH_CLIENT_ID, GOOGLE_CLIENT_ID, AUTH0_CLIENT_ID, OIDC_ISSUER_URL, etc).
+
+Add strict validation with a clear error message:
+
+If OIDC is REQUIRED: fail fast with a friendly message listing missing env vars (don’t throw the openid-client low-level error).
+
+If OIDC is OPTIONAL (preferred): do not initialize openid-client at startup unless all required vars exist. Instead:
+
+only initialize inside the auth route when needed, OR
+
+wrap OIDC init behind if (process.env.OIDC_CLIENT_ID && process.env.OIDC_ISSUER_URL ...).
+
+Fix the express-session deprecated req.secret warning:
+
+Ensure session middleware includes secret: process.env.SESSION_SECRET (and if missing, generate a clear error or default only for dev).
+
+Add/Update npm run verify to include:
+
+check that auth endpoints don’t crash the server
+
+if OIDC is enabled, verify config loads successfully
+
+if OIDC env vars are missing, verify server still boots and returns a sensible response (e.g., 501 “OIDC not configured”)
+
+Definition of Done:
+
+App boots successfully in production with current Railway env vars
+
+No crash loops
+
+Auth endpoints either work (if configured) or return a clear “Auth not configured” response
+
+Session secret warning is resolved
+
+Provide:
+
+the exact env var names required
+
+where in Railway/Replit to set them
+
+proof: successful boot logs + npm run verify output
+
+Quick note for you (so you can help it faster)
+
+If the agent asks “which client id?” you can tell it:
+
+It’s whatever auth provider it’s trying to use (OIDC).
+It must stop initializing OIDC at boot unless those env vars exist.
+
+That prompt will get it unstuck fast.
