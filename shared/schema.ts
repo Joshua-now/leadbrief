@@ -23,6 +23,7 @@ export const contacts = pgTable("contacts", {
   firstName: text("first_name"),
   lastName: text("last_name"),
   title: text("title"),
+  city: text("city"),
   companyId: uuid("company_id").references(() => companies.id),
   linkedinUrl: text("linkedin_url"),
   linkedinProfileId: text("linkedin_profile_id").unique(),

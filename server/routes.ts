@@ -198,7 +198,7 @@ export async function registerRoutes(
   // Single contact intake with rate limiting
   app.post("/api/intake", rateLimit(30, 60000), async (req: Request, res: Response) => {
     try {
-      const { email, phone, firstName, lastName, company, title, linkedinUrl, ghlContactId, leadName, companyName, websiteUrl } = req.body;
+      const { email, phone, firstName, lastName, company, title, linkedinUrl, ghlContactId, leadName, companyName, websiteUrl, city } = req.body;
 
       // Handle GHL webhook format
       const contactEmail = email?.toLowerCase()?.trim();
@@ -206,6 +206,7 @@ export async function registerRoutes(
       const contactFirstName = (firstName || (leadName?.split(" ")[0]))?.trim();
       const contactLastName = (lastName || (leadName?.split(" ").slice(1).join(" ")))?.trim();
       const contactCompany = (company || companyName)?.trim();
+      const contactCity = city?.trim();
 
       if (!contactEmail && !contactPhone && !linkedinUrl) {
         return res.status(400).json({ error: "Email, phone, or LinkedIn URL required" });
@@ -233,6 +234,7 @@ export async function registerRoutes(
         firstName: contactFirstName?.slice(0, 200) || null,
         lastName: contactLastName?.slice(0, 200) || null,
         title: title?.slice(0, 200) || null,
+        city: contactCity?.slice(0, 200) ?? null,
         companyId,
         linkedinUrl: linkedinUrl?.slice(0, 500) || null,
       });
