@@ -1,0 +1,42 @@
+/workspace$ git pull origin main --rebase
+git push origin main
+remote: Enumerating objects: 97, done.
+remote: Counting objects: 100% (97/97), done.
+remote: Compressing objects: 100% (71/71), done.
+remote: Total 76 (delta 36), reused 0 (delta 0), pack-reused 0 (from 0)
+Unpacking objects: 100% (76/76), 34.70 KiB | 220.00 KiB/s, done.
+From https://github.com/Joshua-now/leadbrief
+ * branch            main       -> FETCH_HEAD
+   52c40a8..20a4045  main       -> origin/main
+warning: skipped previously applied commit ad4eaa7
+hint: use --reapply-cherry-picks to include skipped commits
+hint: Disable this message with "git config set advice.skippedCherryPicks false"
+Auto-merging client/src/App.tsx
+CONFLICT (content): Merge conflict in client/src/App.tsx
+Auto-merging client/src/pages/landing.tsx
+CONFLICT (add/add): Merge conflict in client/src/pages/landing.tsx
+Auto-merging package-lock.json
+Auto-merging package.json
+Auto-merging server/replit_integrations/auth/index.ts
+CONFLICT (add/add): Merge conflict in server/replit_integrations/auth/index.ts
+Auto-merging server/replit_integrations/auth/replitAuth.ts
+CONFLICT (add/add): Merge conflict in server/replit_integrations/auth/replitAuth.ts
+Auto-merging server/replit_integrations/auth/routes.ts
+CONFLICT (add/add): Merge conflict in server/replit_integrations/auth/routes.ts
+Auto-merging server/routes.ts
+CONFLICT (content): Merge conflict in server/routes.ts
+error: could not apply efd62cd... Add authentication and settings management to the application
+hint: Resolve all conflicts manually, mark them as resolved with
+hint: "git add/rm <conflicted_files>", then run "git rebase --continue".
+hint: You can instead skip this commit: run "git rebase --skip".
+hint: To abort and get back to the state before "git rebase", run "git rebase --abort".
+hint: Disable this message with "git config set advice.mergeConflict false"
+Could not apply efd62cd... # Add authentication and settings management to the application
+To https://github.com/Joshua-now/leadbrief.git
+ ! [rejected]        main -> main (non-fast-forward)
+error: failed to push some refs to 'https://github.com/Joshua-now/leadbrief.git'
+hint: Updates were rejected because a pushed branch tip is behind its remote
+hint: counterpart. If you want to integrate the remote changes, use 'git pull'
+hint: before pushing again.
+hint: See the 'Note about fast-forwards' in 'git push --help' for details.
+~/workspace$ 
