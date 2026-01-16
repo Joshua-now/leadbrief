@@ -18,7 +18,13 @@ Preferred communication style: Simple, everyday language.
 - **Styling**: Tailwind CSS with CSS variables for theming (light/dark mode support)
 - **Build Tool**: Vite with HMR support for development
 
-The frontend follows a page-based architecture with shared components. Key pages include Import (data upload), Jobs (tracking), Contacts (management), and Reports (analytics).
+The frontend follows a page-based architecture with shared components. Key pages include:
+- **Landing Page**: Public landing page for unauthenticated users with feature showcase
+- **Import**: Data upload with CSV/JSON/XLSX support
+- **Jobs**: Import job tracking with progress and status
+- **Contacts**: Contact management with search and filtering  
+- **Reports**: Analytics and insights dashboard
+- **Settings**: Webhook configuration, API settings, notifications
 
 ### Backend Architecture
 - **Framework**: Express.js with TypeScript
@@ -28,11 +34,20 @@ The frontend follows a page-based architecture with shared components. Key pages
 
 The backend uses a modular route registration pattern with dedicated storage abstraction for database operations.
 
+### Authentication
+- **Provider**: Replit Auth via OpenID Connect
+- **Session Management**: Express sessions with PostgreSQL store
+- **Protected Routes**: All `/api/*` routes (except `/api/login`, `/api/callback`, `/api/health`) require authentication
+- **User Data**: Stored in `users` table with Replit profile information
+
 ### Data Storage
 - **Database**: PostgreSQL with Drizzle ORM
 - **Schema Location**: `shared/schema.ts` - shared between frontend and backend
 - **Migrations**: Drizzle Kit for schema migrations stored in `/migrations`
 - **Key Tables**:
+  - `users` - User accounts from Replit Auth
+  - `sessions` - Session store for authentication
+  - `settings` - User settings (webhook, API, notifications, retry)
   - `companies` - Company records with enrichment status
   - `contacts` - Contact information linked to companies
   - `bulk_jobs` - Import job tracking with progress and status
@@ -102,6 +117,11 @@ The backend uses a modular route registration pattern with dedicated storage abs
 | `/api/contacts/:id` | GET | Get contact details |
 | `/api/health` | GET | System health check |
 | `/api/config/limits` | GET | Get import limits |
+| `/api/auth/user` | GET | Get current authenticated user |
+| `/api/settings` | GET/POST | User settings (protected) |
+| `/api/login` | GET | Initiate Replit Auth login |
+| `/api/logout` | GET | End session and logout |
+| `/api/callback` | GET | OIDC callback handler |
 
 ### Development Tools
 - **Vite**: Development server and build tool
