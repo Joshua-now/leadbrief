@@ -5,7 +5,8 @@ import { storage } from "./storage";
 import { BulkInputHandler, IMPORT_LIMITS } from "./lib/input-handler";
 import { processJobItems, recoverStaleJobs, getProcessorHealth } from "./lib/job-processor";
 import { parseFile } from "./lib/file-parser";
-import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
+import { setupAuth, registerAuthRoutes, isAuthenticated, activeAuthProvider, isAuthEnabled } from "./replit_integrations/auth";
+import { isSupabaseConfigured } from "./lib/supabase";
 import { db } from "./db";
 
 const upload = multer({
@@ -46,6 +47,15 @@ export async function registerRoutes(
   // Setup authentication (BEFORE other routes)
   await setupAuth(app);
   registerAuthRoutes(app);
+  
+  // Auth config endpoint (public - tells frontend which auth provider to use)
+  app.get("/api/auth/config", (_req: Request, res: Response) => {
+    res.json({
+      provider: activeAuthProvider,
+      isEnabled: isAuthEnabled,
+      supabaseConfigured: isSupabaseConfigured(),
+    });
+  });
   
   // Health check endpoint (public - no auth required)
   app.get("/api/health", async (_req: Request, res: Response) => {

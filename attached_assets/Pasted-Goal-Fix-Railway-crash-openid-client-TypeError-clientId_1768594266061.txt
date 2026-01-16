@@ -1,0 +1,72 @@
+Goal: Fix Railway crash: openid-client TypeError: "clientId" must be a non-empty string caused by Replit Auth being initialized in production where REPL_ID / OIDC env vars don’t exist.
+
+Task
+
+Make Replit Auth only run on Replit, never on Railway.
+
+Use Supabase Auth as the only auth in Railway/production.
+
+Ensure the app does not crash if Replit auth env vars are missing.
+
+Instructions (implementation)
+
+Search the codebase for Replit auth / openid-client usage:
+
+openid-client, Issuer.discover, discovery(, REPL_ID, replit, oidc, auth
+
+Wrap ALL Replit Auth initialization behind a guard like:
+
+const isReplit = !!process.env.REPL_ID; // or REPLIT_DEPLOYMENT / REPLIT_ENV
+const isRailway = !!process.env.RAILWAY_ENVIRONMENT || !!process.env.RAILWAY_PROJECT_ID;
+
+
+If not isReplit, do not call Issuer.discover() / discovery() at all.
+
+If a route requires auth, enforce Supabase auth instead:
+
+In Next.js routes/pages, check Supabase session (server-side) and redirect to /login if missing.
+
+If the app has “protected routes” (settings/jobs/contacts), make them protected by Supabase session instead of Replit auth.
+
+Remove any boot-time auth configuration that runs during server start on Railway.
+
+Also fix session warning
+
+Express warning: express-session deprecated req.secret; provide secret option
+
+Ensure session middleware is configured with:
+
+secret: process.env.SESSION_SECRET
+
+
+If SESSION_SECRET missing in production, fail fast with a clear error message.
+
+Definition of Done
+
+Railway deploy no longer crashes
+
+No openid-client error on boot
+
+/login works with Supabase Auth user
+
+Settings/contacts/jobs routes work when logged in, redirect when not
+
+Provide the required Railway env vars:
+
+NEXT_PUBLIC_SUPABASE_URL
+
+NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+SUPABASE_SERVICE_ROLE_KEY (server only)
+
+SESSION_SECRET
+
+Railway variables you should set (so the agent doesn’t guess)
+
+NEXT_PUBLIC_SUPABASE_URL = https://<project-ref>.supabase.co
+
+NEXT_PUBLIC_SUPABASE_ANON_KEY = <anon key from Supabase API settings>
+
+SUPABASE_SERVICE_ROLE_KEY = <service_role key from Supabase>
+
+SESSION_SECRET = <random long string>

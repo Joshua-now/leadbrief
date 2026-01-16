@@ -132,31 +132,59 @@ The backend uses a modular route registration pattern with dedicated storage abs
 
 ### Required Environment Variables
 
-For full functionality (with authentication):
+**Core (Always Required):**
 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `DATABASE_URL` | Yes | PostgreSQL connection string |
-| `SESSION_SECRET` | Yes | Secret key for session encryption (generate a secure random string) |
-| `REPL_ID` | For Auth | Client ID for Replit OIDC (auto-set in Replit) |
-| `ISSUER_URL` | Optional | OIDC issuer URL (defaults to https://replit.com/oidc) |
+| `SESSION_SECRET` | Yes | Secret key for session encryption (generate with `openssl rand -hex 32`) |
 | `NODE_ENV` | Optional | Set to `production` for production builds |
 | `PORT` | Optional | Server port (defaults to 5000) |
+
+**Replit Auth (Auto-configured in Replit):**
+
+| Variable | Description |
+|----------|-------------|
+| `REPL_ID` | Client ID for Replit OIDC (auto-set in Replit environment) |
+| `ISSUER_URL` | OIDC issuer URL (defaults to https://replit.com/oidc) |
+
+**Supabase Auth (For Railway/External Deployment):**
+
+| Variable | Description |
+|----------|-------------|
+| `SUPABASE_URL` | Your Supabase project URL (e.g., https://xxx.supabase.co) |
+| `SUPABASE_ANON_KEY` | Supabase anonymous/public key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (server-only) |
+| `VITE_SUPABASE_URL` | Same as SUPABASE_URL (for frontend) |
+| `VITE_SUPABASE_ANON_KEY` | Same as SUPABASE_ANON_KEY (for frontend) |
+
+### Auth Provider Detection
+
+The application automatically detects which auth provider to use:
+
+1. **On Replit** (REPL_ID present): Uses Replit Auth via OIDC
+2. **On Railway** (SUPABASE_URL configured): Uses Supabase Auth
+3. **Neither configured**: Auth endpoints return 501 "Authentication not configured"
 
 ### Graceful Degradation
 
 The application boots successfully even without authentication configured:
 
-- **When REPL_ID is missing**: Auth endpoints return 501 "Authentication not configured"
+- **When no auth provider is available**: Auth endpoints return 501 instead of crashing
 - **When SESSION_SECRET is missing**: Falls back to in-memory sessions (not for production)
-- **Protected routes**: Return 501 instead of crashing when auth is disabled
+- **Protected routes**: Return 501 when auth is disabled
 
 ### Railway Deployment
 
 1. Create a PostgreSQL database in Railway
-2. Set the `DATABASE_URL` environment variable
-3. Generate and set `SESSION_SECRET`: `openssl rand -hex 32`
+2. Create a Supabase project for authentication
+3. Set environment variables:
+   - `DATABASE_URL` - PostgreSQL connection string from Railway
+   - `SESSION_SECRET` - Generate with `openssl rand -hex 32`
+   - `SUPABASE_URL` - From Supabase project settings
+   - `SUPABASE_ANON_KEY` - From Supabase API settings
+   - `SUPABASE_SERVICE_ROLE_KEY` - From Supabase API settings
+   - `VITE_SUPABASE_URL` - Same as SUPABASE_URL
+   - `VITE_SUPABASE_ANON_KEY` - Same as SUPABASE_ANON_KEY
 4. Build command: `npm run build`
 5. Start command: `npm run start`
-
-For Replit Auth on Railway, you'll need to configure OIDC credentials manually since REPL_ID is only available in Replit environments.

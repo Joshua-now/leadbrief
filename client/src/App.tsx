@@ -13,8 +13,10 @@ import ContactsPage from "@/pages/contacts";
 import ReportsPage from "@/pages/reports";
 import SettingsPage from "@/pages/settings";
 import LandingPage from "@/pages/landing";
+import LoginPage from "@/pages/login";
 import NotFound from "@/pages/not-found";
 import { Loader2 } from "lucide-react";
+import { useLocation } from "wouter";
 
 function Router() {
   return (
@@ -53,8 +55,18 @@ function AuthenticatedApp() {
   );
 }
 
+function UnauthenticatedRouter() {
+  return (
+    <Switch>
+      <Route path="/login" component={LoginPage} />
+      <Route component={LandingPage} />
+    </Switch>
+  );
+}
+
 function App() {
   const { isAuthenticated, isLoading } = useAuth();
+  const [location] = useLocation();
 
   if (isLoading) {
     return (
@@ -65,7 +77,7 @@ function App() {
   }
 
   if (!isAuthenticated) {
-    return <LandingPage />;
+    return <UnauthenticatedRouter />;
   }
 
   return <AuthenticatedApp />;

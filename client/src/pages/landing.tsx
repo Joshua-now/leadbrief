@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { FileText, Upload, Users, BarChart3, Shield, Zap, RefreshCw } from "lucide-react";
+import { Link } from "wouter";
 
 export default function LandingPage() {
   return (
@@ -14,7 +15,7 @@ export default function LandingPage() {
             <span className="text-lg font-semibold">LeadBrief</span>
           </div>
           <Button asChild data-testid="button-login">
-            <a href="/api/login">Sign In</a>
+            <Link href="/login">Sign In</Link>
           </Button>
         </div>
       </header>
@@ -32,7 +33,7 @@ export default function LandingPage() {
           </p>
           <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
             <Button size="lg" asChild data-testid="button-get-started">
-              <a href="/api/login">Get Started Free</a>
+              <Link href="/login">Get Started Free</Link>
             </Button>
           </div>
           <p className="mt-4 text-sm text-muted-foreground">
