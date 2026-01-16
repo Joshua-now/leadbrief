@@ -1,0 +1,44 @@
+Fix the file uploader/import flow so it actually works end-to-end in production (Railway) and does not silently fail.
+
+Goal:
+- The upload UI must accept CSV and XLSX files and import leads into Supabase.
+- PDF and other formats should show a clear error message (not crash / not silent).
+- The importer should be resilient: detect headers, map common column names, and ignore extra columns.
+- Start by supporting the core fields used by the app: leadName, companyName, websiteUrl, email, phone, city (optional).
+- Create leads via the same logic as /api/intake (so jobs/processing works the same).
+
+Tasks (do ALL):
+1) Find the upload component/page and identify what endpoint it calls. If it doesn't call anything, wire it to a new API route.
+2) Implement an API route for uploads in Next.js App Router (e.g. POST /api/import):
+   - Parse multipart/form-data
+   - Accept .csv and .xlsx
+   - For CSV: use a robust parser (papaparse or csv-parse)
+   - For XLSX: use xlsx package
+3) Auto-map headers:
+   - Map synonyms like:
+     - name/full_name/contact_name -> leadName
+     - company/business/company_name -> companyName
+     - website/url/site -> websiteUrl
+     - email/email_address -> email
+     - phone/phone_number -> phone
+     - city/town -> city
+   - Trim whitespace, normalize case, handle BOM, handle different delimiters if possible.
+4) Validation:
+   - Require at least websiteUrl OR companyName+city (if website missing, still import but mark status accordingly)
+   - Skip rows that are completely empty
+   - Return a summary: totalRows, importedRows, skippedRows, errors[] (row number + reason)
+5) Insert into Supabase:
+   - Use service role key on the server only
+   - Insert into leads table with city if present
+   - If the system expects jobs, create jobs records too (queued) exactly like /api/intake
+6) UX:
+   - In the upload UI show progress + results summary and display row-level errors.
+   - If user uploads PDF, return 415 Unsupported Media Type with a friendly message.
+7) Add logs:
+   - Add server-side console logs for file type, row counts, and insert results so Railway logs show what happened.
+8) Provide me the exact files changed and the curl command to test /api/import.
+
+Important constraints:
+- Do not expose SUPABASE_SERVICE_ROLE_KEY to the client.
+- Must work on Railway build/runtime.
+- Keep changes minimal: reuse existing intake/job creation code if possible.
