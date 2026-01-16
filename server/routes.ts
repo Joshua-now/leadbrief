@@ -9,6 +9,7 @@ import { setupAuth, registerAuthRoutes, isAuthenticated, activeAuthProvider, isA
 import { isSupabaseConfigured } from "./lib/supabase";
 import { db } from "./db";
 import { getSystemHealth, withTimeout, categorizeError } from "./lib/guardrails";
+import { getEnvPresenceFlags, getAppVersion } from "./lib/env";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -81,6 +82,22 @@ export async function registerRoutes(
       // Support for detailed or simple health check
       const detailed = req.query.detailed === "true";
       
+      // DB smoke test - quick check to verify DB connection
+      let dbOk = false;
+      let dbLatencyMs = 0;
+      try {
+        const dbStart = Date.now();
+        await storage.getBulkJobs(1); // Simple query to test connection
+        dbLatencyMs = Date.now() - dbStart;
+        dbOk = true;
+      } catch (dbError) {
+        console.error("[Health] DB smoke test failed:", dbError);
+        dbOk = false;
+      }
+      
+      const envFlags = getEnvPresenceFlags();
+      const version = getAppVersion();
+      
       if (detailed) {
         // Full system health with timeout protection
         const systemHealth = await withTimeout(
@@ -90,45 +107,42 @@ export async function registerRoutes(
         );
         
         res.json({
+          ok: systemHealth.status === "healthy" && dbOk,
           ...systemHealth,
+          version,
           authProvider: activeAuthProvider,
-          environment: {
-            SUPABASE_URL: !!process.env.SUPABASE_URL,
-            SUPABASE_ANON_KEY: !!process.env.SUPABASE_ANON_KEY,
-            SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-            SESSION_SECRET: !!process.env.SESSION_SECRET,
-            DATABASE_URL: !!process.env.DATABASE_URL,
-            APP_URL: !!process.env.APP_URL,
-            REPL_ID: !!process.env.REPL_ID,
-          },
+          db: dbOk,
+          dbLatencyMs,
+          env: envFlags,
           limits: IMPORT_LIMITS,
         });
       } else {
         // Simple health check for load balancers
         const processorHealth = await getProcessorHealth();
+        const isHealthy = processorHealth.healthy && dbOk;
         
         res.json({
-          status: processorHealth.healthy ? "healthy" : "degraded",
+          ok: isHealthy,
+          status: isHealthy ? "healthy" : "degraded",
           timestamp: new Date().toISOString(),
+          version,
           authProvider: activeAuthProvider,
-          environment: {
-            SUPABASE_URL: !!process.env.SUPABASE_URL,
-            SUPABASE_ANON_KEY: !!process.env.SUPABASE_ANON_KEY,
-            SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-            SESSION_SECRET: !!process.env.SESSION_SECRET,
-            DATABASE_URL: !!process.env.DATABASE_URL,
-            APP_URL: !!process.env.APP_URL,
-            REPL_ID: !!process.env.REPL_ID,
-          },
+          db: dbOk,
+          dbLatencyMs,
+          env: envFlags,
           processor: processorHealth,
           limits: IMPORT_LIMITS,
         });
       }
     } catch (error) {
       const categorized = categorizeError(error);
-      res.status(500).json({ 
+      res.status(200).json({ 
+        ok: false,
         status: "unhealthy", 
         error: "Health check failed",
+        db: false,
+        version: getAppVersion(),
+        env: getEnvPresenceFlags(),
         category: categorized.category,
         isRecoverable: categorized.isRecoverable,
       });

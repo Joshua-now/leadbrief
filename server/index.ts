@@ -3,6 +3,10 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startHealthMonitoring, setupGracefulShutdown } from "./lib/guardrails";
+import { logEnvironmentStatus } from "./lib/env";
+
+// Log environment status at boot
+logEnvironmentStatus();
 
 const app = express();
 const httpServer = createServer(app);
