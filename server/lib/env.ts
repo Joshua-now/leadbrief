@@ -16,6 +16,7 @@ const SECRETS = new Set([
   'SUPABASE_ANON_KEY',
   'SUPABASE_SERVICE_ROLE_KEY',
   'API_KEY',
+  'DEBUG_KEY',
 ]);
 
 // Required for Railway/Supabase deployment
@@ -31,6 +32,7 @@ const OPTIONAL_VARS = [
   'DATABASE_URL',
   'APP_URL',
   'API_KEY',
+  'DEBUG_KEY',
 ] as const;
 
 // Replit-specific (only checked when on Replit)

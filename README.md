@@ -37,6 +37,7 @@ A bulk contact enrichment platform supporting CSV/JSON/XLSX imports with robust 
 | `SUPABASE_SERVICE_ROLE_KEY` | Recommended | Supabase service role key (for server operations) |
 | `APP_URL` | Recommended | Your app URL (e.g., `https://myapp.up.railway.app`) |
 | `API_KEY` | Optional | API key for `/api/intake` endpoint protection |
+| `DEBUG_KEY` | Recommended | Secret key for `/api/debug/lastlog` endpoint access |
 | `NODE_ENV` | Optional | Set to `production` for production builds |
 
 ### Deploy Steps
@@ -56,6 +57,7 @@ A bulk contact enrichment platform supporting CSV/JSON/XLSX imports with robust 
    SUPABASE_ANON_KEY=<your-anon-key>
    SUPABASE_SERVICE_ROLE_KEY=<your-service-role-key>
    APP_URL=https://your-app.up.railway.app
+   DEBUG_KEY=<openssl rand -hex 16>
    NODE_ENV=production
    ```
 
@@ -85,6 +87,7 @@ The app automatically detects which auth provider to use:
 | `/api/health` | GET | Health check (add `?detailed=true` for full info) |
 | `/api/config/limits` | GET | Get import limits |
 | `/api/auth/config` | GET | Get auth provider info |
+| `/api/debug/lastlog` | GET | Get last N log lines (requires `X-DEBUG-KEY` header) |
 
 ### Protected Endpoints (require auth)
 

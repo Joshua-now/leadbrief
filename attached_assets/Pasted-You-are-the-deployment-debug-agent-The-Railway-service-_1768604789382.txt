@@ -1,0 +1,97 @@
+You are the deployment/debug agent. The Railway service keeps crashing/restarting and the logs “wipe,” so we can’t see what happened. Fix this systematically and make logs persistent + the app resilient.
+
+Goal: app boots consistently on Railway, and we can always retrieve the last crash reason.
+
+1) Identify the crash source
+
+Inspect the Railway deploy/runtime config: build command, start command, port usage, Node version.
+
+Verify the app listens on process.env.PORT only (no hardcoded 3000/5000/8080).
+
+If the repo has both Next.js and Express builds, confirm which entrypoint Railway is actually starting.
+
+2) Add crash-proof logging
+
+Ensure all logs go to stdout/stderr (no silent logger).
+
+Add a global crash handler at process start:
+
+process.on("uncaughtException", ...)
+
+process.on("unhandledRejection", ...)
+
+log full stack traces.
+
+Add request logging middleware for API routes (method/path/status/ms).
+
+Add a /api/health endpoint that checks:
+
+process uptime
+
+env var presence flags (NOT secrets)
+
+DB connection smoke test
+
+Redis connection smoke test (if used)
+
+3) Capture logs even when Railway restarts
+
+Write last 2000 lines of logs to a local rolling file /tmp/app.log (or similar) AND still print to stdout.
+
+Add endpoint /api/debug/lastlog that returns the last N lines from that file (protected by a secret header X-DEBUG-KEY using process.env.DEBUG_KEY).
+
+If filesystem is ephemeral, that’s okay—this is only for “right after crash” diagnosis.
+
+4) Fix common Railway crash causes
+
+If error resembles "clientId" must be a non-empty string from openid-client, make auth provider optional:
+
+If REPL_ID/Replit auth env vars are missing, disable Replit OpenID auth code path and fall back to Supabase auth only.
+
+Do NOT attempt discovery/configuration when clientId is empty.
+
+Ensure required env vars are validated at boot with clear error messages:
+
+SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
+
+DATABASE_URL
+
+SESSION_SECRET
+
+APP_URL
+
+DEBUG_KEY
+
+Add timeouts to any external calls (scrape, AI calls, DB queries) to prevent hangs.
+
+5) Make deploy reproducible
+
+Add a scripts/verify.ts (or node script) that runs:
+
+health check
+
+auth check returns 401 if unauthenticated
+
+DB insert/read smoke test (safe test table)
+
+Ensure npm run build and npm run start work locally and in Railway.
+
+6) Deliverables
+
+Tell me exactly what the crash was (root cause).
+
+Commit fixes.
+
+Provide the exact Railway env var list and start/build commands to use.
+
+After changes, redeploy and confirm:
+
+service stays up
+
+/api/health works
+
+/api/debug/lastlog works with X-DEBUG-KEY
+
+core endpoints work (intake/import/contacts/jobs)
+
+Proceed now.

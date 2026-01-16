@@ -10,6 +10,7 @@ import { isSupabaseConfigured } from "./lib/supabase";
 import { db } from "./db";
 import { getSystemHealth, withTimeout, categorizeError } from "./lib/guardrails";
 import { getEnvPresenceFlags, getAppVersion } from "./lib/env";
+import { getLastLogs, crashLog } from "./lib/crash-logger";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -147,6 +148,31 @@ export async function registerRoutes(
         isRecoverable: categorized.isRecoverable,
       });
     }
+  });
+
+  // Debug endpoint to get last logs (protected by DEBUG_KEY)
+  app.get("/api/debug/lastlog", (req: Request, res: Response) => {
+    const debugKey = req.headers['x-debug-key'] as string;
+    const configuredKey = process.env.DEBUG_KEY;
+    
+    // Require DEBUG_KEY to be set and match
+    if (!configuredKey) {
+      return res.status(501).json({ error: "DEBUG_KEY not configured" });
+    }
+    
+    if (!debugKey || debugKey !== configuredKey) {
+      return res.status(401).json({ error: "Invalid or missing X-DEBUG-KEY header" });
+    }
+    
+    const lines = parseInt(req.query.lines as string) || 100;
+    const logs = getLastLogs(Math.min(lines, 2000));
+    
+    res.json({
+      count: logs.length,
+      logs,
+      uptime: process.uptime(),
+      memoryUsage: process.memoryUsage(),
+    });
   });
 
   // Recover stale jobs endpoint (for manual trigger or cron)

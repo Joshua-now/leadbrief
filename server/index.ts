@@ -4,8 +4,14 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startHealthMonitoring, setupGracefulShutdown } from "./lib/guardrails";
 import { logEnvironmentStatus } from "./lib/env";
+import { setupCrashHandlers, initLogFile, crashLog } from "./lib/crash-logger";
+
+// Initialize crash-proof logging FIRST (before anything else)
+initLogFile();
+setupCrashHandlers();
 
 // Log environment status at boot
+crashLog('INFO', 'Application starting');
 logEnvironmentStatus();
 
 const app = express();
