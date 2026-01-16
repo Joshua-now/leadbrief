@@ -28,7 +28,8 @@ export default function JobsPage() {
 
   const retryMutation = useMutation({
     mutationFn: async (jobId: string) => {
-      return await apiRequest("POST", `/api/jobs/${jobId}/retry`);
+      const response = await apiRequest("POST", `/api/jobs/${jobId}/retry`);
+      return await response.json();
     },
     onSuccess: () => {
       toast({
@@ -48,9 +49,10 @@ export default function JobsPage() {
 
   const recoverMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest("POST", "/api/jobs/recover");
+      const response = await apiRequest("POST", "/api/jobs/recover");
+      return await response.json() as { recoveredJobs: number };
     },
-    onSuccess: (data: { recoveredJobs: number }) => {
+    onSuccess: (data) => {
       toast({
         title: "Recovery Complete",
         description: data.recoveredJobs > 0 

@@ -163,9 +163,20 @@ export async function processJobItems(jobId: string): Promise<void> {
             break;
           } else if (result.error) {
             lastError = result.error;
+            // Persist retry count after each failed attempt for recovery
+            await storage.updateBulkJobItem(item.id, {
+              retryCount: attempt + 1,
+              lastError: result.error,
+            });
           }
         } catch (err) {
           lastError = err instanceof Error ? err.message : "Unknown error";
+          
+          // Persist retry count after each failed attempt for recovery
+          await storage.updateBulkJobItem(item.id, {
+            retryCount: attempt + 1,
+            lastError,
+          });
           
           // Wait before retry with exponential backoff
           if (attempt < PROCESSOR_CONFIG.MAX_RETRIES - 1) {

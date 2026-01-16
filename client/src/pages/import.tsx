@@ -49,7 +49,7 @@ export default function ImportPage() {
   const importMutation = useMutation({
     mutationFn: async (data: { content: string; jobName: string }) => {
       const response = await apiRequest("POST", "/api/import/bulk", data);
-      return response as ImportResponse;
+      return await response.json() as ImportResponse;
     },
     onSuccess: (data) => {
       toast({
@@ -384,9 +384,9 @@ Limits: ${limits ? `${limits.MAX_RECORDS.toLocaleString()} records, ${limits.MAX
                     Import queued successfully!
                   </p>
                   <p className="text-sm text-green-700 dark:text-green-300">
-                    {importMutation.data.stats.valid} records ready for processing
-                    {importMutation.data.stats.invalid > 0 && 
-                      ` (${importMutation.data.stats.invalid} invalid rows skipped)`}
+                    {importMutation.data.stats?.valid ?? 0} records ready for processing
+                    {(importMutation.data.stats?.invalid ?? 0) > 0 && 
+                      ` (${importMutation.data.stats?.invalid} invalid rows skipped)`}
                   </p>
                 </div>
                 <Button variant="outline" size="sm" asChild>
