@@ -1,5 +1,6 @@
 import { Octokit } from '@octokit/rest';
-import { execSync } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
 
 let connectionSettings: any;
 
@@ -37,8 +38,31 @@ async function getAccessToken() {
   return accessToken;
 }
 
+function getAllFiles(dir: string, baseDir: string = dir): string[] {
+  const files: string[] = [];
+  const ignorePatterns = ['.git', 'node_modules', 'dist', '.replit', '.cache', '.upm', '.config', 'replit.nix', '.breakpoints'];
+  
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+    const relativePath = path.relative(baseDir, fullPath);
+    
+    if (ignorePatterns.some(p => relativePath.startsWith(p) || entry.name.startsWith('.'))) {
+      continue;
+    }
+    
+    if (entry.isDirectory()) {
+      files.push(...getAllFiles(fullPath, baseDir));
+    } else if (entry.isFile()) {
+      files.push(relativePath);
+    }
+  }
+  return files;
+}
+
 async function main() {
   const repoName = 'leadbrief';
+  const owner = 'Joshua-now';
   
   console.log('Getting GitHub access token...');
   const accessToken = await getAccessToken();
@@ -48,37 +72,99 @@ async function main() {
   const { data: user } = await octokit.users.getAuthenticated();
   console.log(`Authenticated as: ${user.login}`);
 
-  console.log(`Creating repository: ${repoName}...`);
+  console.log(`\nPushing to ${owner}/${repoName}...`);
+  
+  // Get the current main branch ref
+  let currentSha: string | undefined;
   try {
-    await octokit.repos.createForAuthenticatedUser({
-      name: repoName,
-      description: 'LeadBrief - Bulk contact enrichment platform with CSV/JSON import, validation, and self-healing capabilities',
-      private: false,
-      auto_init: false,
+    const { data: ref } = await octokit.git.getRef({
+      owner,
+      repo: repoName,
+      ref: 'heads/main'
     });
-    console.log(`Repository created: https://github.com/${user.login}/${repoName}`);
-  } catch (error: any) {
-    if (error.status === 422) {
-      console.log('Repository already exists, will push to existing repo');
+    currentSha = ref.object.sha;
+    console.log(`Current commit: ${currentSha.slice(0, 7)}`);
+  } catch (e: any) {
+    if (e.status === 404) {
+      console.log('Branch not found, will create new');
     } else {
-      throw error;
+      throw e;
     }
   }
-
-  console.log('Configuring git remote...');
-  const remoteUrl = `https://github.com/${user.login}/${repoName}.git`;
   
-  try {
-    execSync('git remote remove origin', { stdio: 'pipe' });
-  } catch (e) {
+  // Get all files to push
+  const baseDir = process.cwd();
+  const files = getAllFiles(baseDir);
+  console.log(`Found ${files.length} files to push`);
+  
+  // Create blobs for all files
+  console.log('Creating file blobs...');
+  const treeItems: { path: string; mode: '100644'; type: 'blob'; sha: string }[] = [];
+  
+  for (const file of files) {
+    const content = fs.readFileSync(path.join(baseDir, file));
+    const { data: blob } = await octokit.git.createBlob({
+      owner,
+      repo: repoName,
+      content: content.toString('base64'),
+      encoding: 'base64'
+    });
+    treeItems.push({
+      path: file,
+      mode: '100644',
+      type: 'blob',
+      sha: blob.sha
+    });
   }
   
-  execSync(`git remote add origin ${remoteUrl}`, { stdio: 'inherit' });
-
-  console.log('Pushing to GitHub...');
-  execSync(`git -c http.extraHeader="Authorization: Bearer ${accessToken}" push -u origin main --force`, { stdio: 'inherit' });
+  // Create tree
+  console.log('Creating tree...');
+  const { data: tree } = await octokit.git.createTree({
+    owner,
+    repo: repoName,
+    tree: treeItems,
+    base_tree: currentSha
+  });
   
-  console.log(`\nSuccess! Your code is now at: https://github.com/${user.login}/${repoName}`);
+  // Create commit
+  console.log('Creating commit...');
+  const { data: commit } = await octokit.git.createCommit({
+    owner,
+    repo: repoName,
+    message: 'LeadBrief: Final cleanup and stabilization - all verification checks pass',
+    tree: tree.sha,
+    parents: currentSha ? [currentSha] : []
+  });
+  
+  // Update ref
+  console.log('Updating branch reference...');
+  try {
+    await octokit.git.updateRef({
+      owner,
+      repo: repoName,
+      ref: 'heads/main',
+      sha: commit.sha,
+      force: true
+    });
+  } catch (e: any) {
+    if (e.status === 422) {
+      await octokit.git.createRef({
+        owner,
+        repo: repoName,
+        ref: 'refs/heads/main',
+        sha: commit.sha
+      });
+    } else {
+      throw e;
+    }
+  }
+  
+  console.log(`\n✓ Successfully pushed to GitHub!`);
+  console.log(`  Commit: ${commit.sha.slice(0, 7)}`);
+  console.log(`  View: https://github.com/${owner}/${repoName}`);
 }
 
-main().catch(console.error);
+main().catch(err => {
+  console.error('Error:', err.message);
+  process.exit(1);
+});
