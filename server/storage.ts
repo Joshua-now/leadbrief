@@ -3,6 +3,7 @@ import {
   contacts,
   bulkJobs,
   bulkJobItems,
+  settings,
   type Company,
   type InsertCompany,
   type Contact,
@@ -11,6 +12,8 @@ import {
   type InsertBulkJob,
   type BulkJobItem,
   type InsertBulkJobItem,
+  type Settings,
+  type InsertSettings,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql } from "drizzle-orm";
@@ -40,6 +43,10 @@ export interface IStorage {
   createBulkJobItems(items: InsertBulkJobItem[]): Promise<BulkJobItem[]>;
   updateBulkJobItem(id: string, updates: Partial<InsertBulkJobItem>): Promise<BulkJobItem | undefined>;
   getBulkJobStats(bulkJobId: string): Promise<{ total: number; completed: number; failed: number; processing: number }>;
+  
+  // Settings
+  getSettings(): Promise<Settings | undefined>;
+  upsertSettings(data: InsertSettings): Promise<Settings>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -163,6 +170,26 @@ export class DatabaseStorage implements IStorage {
       failed: items.filter(i => i.status === "failed").length,
       processing: items.filter(i => i.status === "processing").length,
     };
+  }
+
+  // Settings
+  async getSettings(): Promise<Settings | undefined> {
+    const [result] = await db.select().from(settings).limit(1);
+    return result || undefined;
+  }
+
+  async upsertSettings(data: InsertSettings): Promise<Settings> {
+    const existing = await this.getSettings();
+    if (existing) {
+      const [updated] = await db
+        .update(settings)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(settings.id, existing.id))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(settings).values(data).returning();
+    return created;
   }
 }
 

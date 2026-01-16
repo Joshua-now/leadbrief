@@ -1,5 +1,7 @@
-import { Upload, FileText, Users, BarChart3, Settings } from "lucide-react";
+import { Upload, FileText, Users, BarChart3, Settings, LogOut } from "lucide-react";
 import { useLocation, Link } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Sidebar,
   SidebarContent,
@@ -38,6 +40,10 @@ const menuItems = [
 
 export function AppSidebar() {
   const [location] = useLocation();
+  const { user } = useAuth();
+
+  const initials = `${user?.firstName?.[0] || ""}${user?.lastName?.[0] || ""}`.toUpperCase() || "U";
+  const displayName = [user?.firstName, user?.lastName].filter(Boolean).join(" ") || user?.email || "User";
 
   return (
     <Sidebar>
@@ -75,13 +81,35 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="border-t border-sidebar-border p-4">
+        <div className="mb-3 flex items-center gap-3 px-2">
+          <Avatar className="h-8 w-8">
+            {user?.profileImageUrl && <AvatarImage src={user.profileImageUrl} alt={displayName} />}
+            <AvatarFallback className="bg-primary/10 text-primary text-xs">
+              {initials}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium truncate">{displayName}</p>
+            {user?.email && (
+              <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+            )}
+          </div>
+        </div>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild>
+            <SidebarMenuButton asChild isActive={location === "/settings"}>
               <Link href="/settings" data-testid="nav-settings">
                 <Settings className="h-4 w-4" />
                 <span>Settings</span>
               </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild>
+              <a href="/api/logout" data-testid="button-logout">
+                <LogOut className="h-4 w-4" />
+                <span>Logout</span>
+              </a>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

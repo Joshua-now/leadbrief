@@ -1,0 +1,124 @@
+Task: Fix LeadBrief so auth + pages + APIs work end-to-end, and add comprehensive verification tests.
+
+Symptoms to resolve (must all be fixed):
+
+Clicking Settings returns 404
+
+Contacts page shows “failed to load contacts”
+
+Jobs page shows “failed to load”
+
+App opens without ever requiring login (auth guard not working)
+
+Report page loads but other data pages fail
+
+There may be fake seed contacts present
+
+Constraints:
+
+Do NOT add new external dependencies unless absolutely necessary.
+
+Keep existing UI/logic/response formats unless needed to fix the bug.
+
+Use Supabase (already configured). Assume tables exist: leads, jobs, reports, api_keys, settings.
+
+Railway/production uses env vars:
+NEXT_PUBLIC_SUPABASE_URL
+NEXT_PUBLIC_SUPABASE_ANON_KEY
+SUPABASE_SERVICE_ROLE_KEY
+NEXT_PUBLIC_APP_URL
+
+Phase 1 — Identify the routing/auth mismatch
+
+Inspect app/ routes and confirm these pages exist:
+
+/login
+
+/dashboard (or /contacts)
+
+/jobs
+
+/settings
+
+If /settings is 404:
+
+Create app/settings/page.tsx (or correct route path)
+
+Ensure nav link points to the correct route
+
+Fix auth gating:
+
+If the app should require login, implement a guard in middleware or layout:
+
+unauthenticated users must be redirected to /login
+
+authenticated users can access /dashboard, /contacts, /jobs, /settings
+
+Make sure the login flow uses Supabase Auth correctly.
+
+Phase 2 — Fix API failures for Contacts/Jobs
+
+Find which API endpoints the Contacts/Jobs pages call (Network tab or code search).
+
+Confirm the endpoints exist under app/api/.../route.ts.
+
+Verify Supabase client usage:
+
+client-side reads should use NEXT_PUBLIC_SUPABASE_URL + NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+server-side mutations/admin reads (if needed) should use SUPABASE_SERVICE_ROLE_KEY
+
+Verify RLS:
+
+If RLS is blocking reads, either:
+
+ensure queries use the logged-in user session, OR
+
+for admin-only pages, fetch via server routes using service role key safely (never expose it to client)
+
+Add clear error messages/logging to API routes so failures show real causes (status code + message).
+
+Phase 3 — Add a real health check + comprehensive tests
+
+Add these verification features:
+
+A) Health endpoint
+Create GET /api/health that returns:
+
+ok: true
+
+supabase: connected (by running a lightweight query like select now() or read 1 row)
+
+env: present (only booleans: whether required env vars exist; DO NOT print secrets)
+
+B) End-to-end test script
+Add an npm script npm run verify that:
+
+calls /api/health
+
+runs an intake POST to /api/intake with a dummy lead including city
+
+verifies the lead appears in DB and/or /api/report/:ghlContactId returns expected status
+
+prints PASS/FAIL with reasons
+
+Use Node’s built-in fetch (Node 18+)—no new libs.
+
+C) Remove or isolate seed data
+If “fake contacts” are seeded, put it behind NODE_ENV !== "production" or remove it.
+
+Definition of Done
+
+/settings loads (no 404)
+
+auth requires login (no auto-open dashboard)
+
+contacts list loads successfully
+
+jobs list loads successfully
+
+/api/health returns ok
+
+npm run verify passes locally and in deployment
+
+Proceed step-by-step, commit changes, and provide a short summary of what was fixed.

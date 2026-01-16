@@ -164,3 +164,27 @@ export type BulkJobItem = typeof bulkJobItems.$inferSelect;
 export type InsertBulkJobItem = z.infer<typeof insertBulkJobItemSchema>;
 
 export type Report = typeof reports.$inferSelect;
+
+// Auth tables (required for Replit Auth)
+export * from "./models/auth";
+
+// Settings table
+export const settings = pgTable("settings", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  webhookUrl: text("webhook_url"),
+  apiKeyEnabled: boolean("api_key_enabled").default(false),
+  emailNotifications: boolean("email_notifications").default(false),
+  autoRetryEnabled: boolean("auto_retry_enabled").default(true),
+  maxRetries: integer("max_retries").default(3),
+});
+
+export const insertSettingsSchema = createInsertSchema(settings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type Settings = typeof settings.$inferSelect;
+export type InsertSettings = z.infer<typeof insertSettingsSchema>;

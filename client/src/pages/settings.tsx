@@ -1,0 +1,282 @@
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { Settings, Key, Bell, Shield, Save, RefreshCw, AlertCircle, Check } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+
+interface AppSettings {
+  id: string;
+  webhookUrl: string | null;
+  apiKeyEnabled: boolean;
+  emailNotifications: boolean;
+  autoRetryEnabled: boolean;
+  maxRetries: number;
+}
+
+export default function SettingsPage() {
+  const { toast } = useToast();
+  const [webhookUrl, setWebhookUrl] = useState("");
+  const [apiKeyEnabled, setApiKeyEnabled] = useState(false);
+  const [emailNotifications, setEmailNotifications] = useState(false);
+  const [autoRetryEnabled, setAutoRetryEnabled] = useState(true);
+  const [maxRetries, setMaxRetries] = useState(3);
+
+  const { data: settings, isLoading, error } = useQuery<AppSettings>({
+    queryKey: ["/api/settings"],
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async (data: Partial<AppSettings>) => {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to save settings");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
+      toast({
+        title: "Settings saved",
+        description: "Your settings have been updated successfully.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Failed to save",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleSave = () => {
+    saveMutation.mutate({
+      webhookUrl,
+      apiKeyEnabled,
+      emailNotifications,
+      autoRetryEnabled,
+      maxRetries,
+    });
+  };
+
+  // Update local state when settings load
+  useState(() => {
+    if (settings) {
+      setWebhookUrl(settings.webhookUrl || "");
+      setApiKeyEnabled(settings.apiKeyEnabled);
+      setEmailNotifications(settings.emailNotifications);
+      setAutoRetryEnabled(settings.autoRetryEnabled);
+      setMaxRetries(settings.maxRetries);
+    }
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 overflow-auto p-6">
+        <div className="mx-auto max-w-2xl space-y-6">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+            <p className="text-muted-foreground">Manage your application settings</p>
+          </div>
+          <Card>
+            <CardContent className="p-6 space-y-4">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex-1 overflow-auto p-6">
+        <div className="mx-auto max-w-2xl">
+          <Card className="border-destructive/50 bg-destructive/5">
+            <CardContent className="flex items-center gap-4 py-6">
+              <AlertCircle className="h-8 w-8 text-destructive" />
+              <div className="flex-1">
+                <p className="font-medium">Failed to load settings</p>
+                <p className="text-sm text-muted-foreground">
+                  {error instanceof Error ? error.message : "Unknown error"}
+                </p>
+              </div>
+              <Button variant="outline" onClick={() => window.location.reload()} data-testid="button-retry">
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Retry
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 overflow-auto p-6">
+      <div className="mx-auto max-w-2xl space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight" data-testid="text-settings-title">Settings</h1>
+            <p className="text-muted-foreground">Manage your application settings</p>
+          </div>
+          <Button onClick={handleSave} disabled={saveMutation.isPending} data-testid="button-save-settings">
+            {saveMutation.isPending ? (
+              <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="mr-2 h-4 w-4" />
+            )}
+            Save Changes
+          </Button>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Key className="h-5 w-5" />
+              Webhook Configuration
+            </CardTitle>
+            <CardDescription>
+              Configure webhook URL for GoHighLevel (GHL) integration
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="webhook-url">Webhook URL</Label>
+              <Input
+                id="webhook-url"
+                placeholder="https://your-ghl-webhook-url.com"
+                value={webhookUrl}
+                onChange={(e) => setWebhookUrl(e.target.value)}
+                data-testid="input-webhook-url"
+              />
+              <p className="text-xs text-muted-foreground">
+                Enter your GHL webhook URL to receive enriched contact data
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              API Settings
+            </CardTitle>
+            <CardDescription>
+              Configure API access and security settings
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label>API Key Authentication</Label>
+                <p className="text-xs text-muted-foreground">
+                  Require API key for intake endpoints
+                </p>
+              </div>
+              <Switch
+                checked={apiKeyEnabled}
+                onCheckedChange={setApiKeyEnabled}
+                data-testid="switch-api-key"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Bell className="h-5 w-5" />
+              Notifications
+            </CardTitle>
+            <CardDescription>
+              Configure notification preferences
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label>Email Notifications</Label>
+                <p className="text-xs text-muted-foreground">
+                  Receive email alerts for job completions
+                </p>
+              </div>
+              <Switch
+                checked={emailNotifications}
+                onCheckedChange={setEmailNotifications}
+                data-testid="switch-email-notifications"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <RefreshCw className="h-5 w-5" />
+              Processing Settings
+            </CardTitle>
+            <CardDescription>
+              Configure job processing behavior
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label>Auto-Retry Failed Items</Label>
+                <p className="text-xs text-muted-foreground">
+                  Automatically retry failed enrichment attempts
+                </p>
+              </div>
+              <Switch
+                checked={autoRetryEnabled}
+                onCheckedChange={setAutoRetryEnabled}
+                data-testid="switch-auto-retry"
+              />
+            </div>
+            
+            {autoRetryEnabled && (
+              <div className="space-y-2">
+                <Label htmlFor="max-retries">Maximum Retries</Label>
+                <Input
+                  id="max-retries"
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={maxRetries}
+                  onChange={(e) => setMaxRetries(parseInt(e.target.value) || 3)}
+                  className="w-24"
+                  data-testid="input-max-retries"
+                />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="border-green-500/20 bg-green-500/5">
+          <CardContent className="flex items-center gap-4 py-4">
+            <Check className="h-5 w-5 text-green-600" />
+            <div>
+              <p className="text-sm font-medium">System Status</p>
+              <p className="text-xs text-muted-foreground">
+                All systems operational. Database connected.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}

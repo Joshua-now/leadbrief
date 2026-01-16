@@ -5,6 +5,8 @@ import { storage } from "./storage";
 import { BulkInputHandler, IMPORT_LIMITS } from "./lib/input-handler";
 import { processJobItems, recoverStaleJobs, getProcessorHealth } from "./lib/job-processor";
 import { parseFile } from "./lib/file-parser";
+import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
+import { db } from "./db";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -41,7 +43,11 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   
-  // Health check endpoint
+  // Setup authentication (BEFORE other routes)
+  await setupAuth(app);
+  registerAuthRoutes(app);
+  
+  // Health check endpoint (public - no auth required)
   app.get("/api/health", async (_req: Request, res: Response) => {
     try {
       const processorHealth = await getProcessorHealth();
@@ -390,6 +396,41 @@ export async function registerRoutes(
   // Get import limits (for frontend validation)
   app.get("/api/config/limits", (_req: Request, res: Response) => {
     res.json(IMPORT_LIMITS);
+  });
+
+  // Settings endpoints (protected)
+  app.get("/api/settings", isAuthenticated, async (_req: Request, res: Response) => {
+    try {
+      const appSettings = await storage.getSettings();
+      res.json(appSettings || {
+        id: null,
+        webhookUrl: null,
+        apiKeyEnabled: false,
+        emailNotifications: false,
+        autoRetryEnabled: true,
+        maxRetries: 3,
+      });
+    } catch (error) {
+      console.error("Error fetching settings:", error);
+      res.status(500).json({ error: "Failed to fetch settings" });
+    }
+  });
+
+  app.post("/api/settings", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { webhookUrl, apiKeyEnabled, emailNotifications, autoRetryEnabled, maxRetries } = req.body;
+      const appSettings = await storage.upsertSettings({
+        webhookUrl: webhookUrl || null,
+        apiKeyEnabled: !!apiKeyEnabled,
+        emailNotifications: !!emailNotifications,
+        autoRetryEnabled: autoRetryEnabled !== false,
+        maxRetries: Math.min(Math.max(parseInt(maxRetries) || 3, 1), 10),
+      });
+      res.json(appSettings);
+    } catch (error) {
+      console.error("Error saving settings:", error);
+      res.status(500).json({ error: "Failed to save settings" });
+    }
   });
 
   return httpServer;
