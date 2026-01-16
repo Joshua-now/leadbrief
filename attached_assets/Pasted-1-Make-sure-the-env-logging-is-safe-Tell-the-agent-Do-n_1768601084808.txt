@@ -1,0 +1,75 @@
+1) Make sure the “env logging” is safe
+
+Tell the agent:
+
+Do not log secrets (never print full keys/URLs with passwords).
+
+Log only presence + last 4 chars (example: SUPABASE_ANON_KEY=present(…abcd)).
+
+DATABASE_URL must be redacted (it contains credentials).
+
+Prompt snippet:
+
+Audit env logging in server/lib/env.ts. Ensure secrets are never printed in full. Redact DATABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SESSION_SECRET, tokens. Only log booleans or last 4 chars.
+
+2) Add a one-command “migrate tables” path (if not already)
+
+You already hit “no tables” earlier, so ensure you have an intentional schema path:
+
+If using SQL migrations: npm run db:migrate (runs drizzle or psql migrations)
+
+Or if schema is in Supabase: keep Railway DB out of it (don’t mix DBs)
+
+Prompt snippet:
+
+Confirm where the source-of-truth DB is: Supabase Postgres OR Railway Postgres. Do not mix. If Railway Postgres is used, add npm run db:migrate that creates required tables. If Supabase is used, ensure the app never attempts to create tables on Railway DB.
+
+3) Confirm production auth mode is what YOU want
+
+Right now, it sounds like:
+
+no Replit auth on Railway ✅
+
+endpoints return 401/501 without auth ✅
+
+But your UI earlier was “open” / no login. Decide the rule:
+
+Private app (recommended): require auth for UI routes + contacts/jobs/settings endpoints
+
+Public app: protect only API intake with X-API-KEY
+
+Prompt snippet:
+
+Confirm desired access: UI must require login. Ensure /, /import, /contacts, /jobs, /settings redirect to login when not authenticated. Keep /api/intake protected by X-API-KEY.
+
+4) Pin Node version (Railway used Node 22 in logs)
+
+This matters a lot. Pin it so builds don’t change under you.
+
+add "engines": { "node": ">=20 <23" } (or whatever you tested)
+
+or add .nvmrc with the version you want
+
+Prompt snippet:
+
+Add Node version pinning (.nvmrc and/or package.json engines) to prevent Railway from switching Node versions unexpectedly.
+
+“Push to GitHub” prompt (copy/paste)
+
+Use this exactly:
+
+Finalize and push to GitHub:
+
+Run: npm run typecheck, npm run build, npm run verify and ensure all pass.
+
+Ensure env logging redacts secrets.
+
+Add Node version pinning.
+
+Update README with Railway env var list + deploy steps.
+
+Commit with message: chore: production hardening + railway deploy
+
+Push to the existing GitHub repo (or create one if none exists) and print the repo URL + latest commit hash.
+
+If you paste what repo you want it in (the Joshua-now/Lead-Breif one, or a new repo name), I can tailor the push prompt to that exactly—but the above will work as-is in Replit.
