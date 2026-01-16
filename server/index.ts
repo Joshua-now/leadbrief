@@ -2,9 +2,15 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { startHealthMonitoring, setupGracefulShutdown } from "./lib/guardrails";
 
 const app = express();
 const httpServer = createServer(app);
+
+// Setup graceful shutdown
+setupGracefulShutdown(async () => {
+  httpServer.close();
+});
 
 declare module "http" {
   interface IncomingMessage {
@@ -93,6 +99,9 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
+      
+      // Start health monitoring after server is up
+      startHealthMonitoring(60000); // Check every minute
     },
   );
 })();

@@ -1,5 +1,8 @@
 import { storage } from "../storage";
 
+// Track jobs currently being processed to prevent concurrent execution
+const processingJobs = new Set<string>();
+
 // Configuration for self-healing
 const PROCESSOR_CONFIG = {
   MAX_RETRIES: 3,
@@ -121,6 +124,14 @@ async function processItem(
 
 // Main job processor with self-healing
 export async function processJobItems(jobId: string): Promise<void> {
+  // Prevent concurrent processing of the same job
+  if (processingJobs.has(jobId)) {
+    console.log(`[JobProcessor] Job ${jobId} is already being processed, skipping`);
+    return;
+  }
+  
+  processingJobs.add(jobId);
+  
   try {
     const items = await storage.getBulkJobItems(jobId);
     let successful = 0;
@@ -235,6 +246,9 @@ export async function processJobItems(jobId: string): Promise<void> {
       status: "failed",
       lastError: error instanceof Error ? error.message : "Unknown error",
     });
+  } finally {
+    // Always remove from processing set when done
+    processingJobs.delete(jobId);
   }
 }
 

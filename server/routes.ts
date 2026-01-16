@@ -8,6 +8,7 @@ import { parseFile } from "./lib/file-parser";
 import { setupAuth, registerAuthRoutes, isAuthenticated, activeAuthProvider, isAuthEnabled } from "./replit_integrations/auth";
 import { isSupabaseConfigured } from "./lib/supabase";
 import { db } from "./db";
+import { getSystemHealth, withTimeout, categorizeError } from "./lib/guardrails";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -16,6 +17,23 @@ const upload = multer({
 
 // Rate limiting store (in-memory for MVP)
 const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
+
+// API Key validation middleware for intake endpoint
+function validateApiKey(req: Request, res: Response, next: () => void) {
+  const apiKey = req.headers['x-api-key'] as string;
+  const configuredApiKey = process.env.API_KEY;
+  
+  // If no API_KEY is configured, allow all requests (for development/backwards compatibility)
+  if (!configuredApiKey) {
+    return next();
+  }
+  
+  if (!apiKey || apiKey !== configuredApiKey) {
+    return res.status(401).json({ error: "Invalid or missing API key" });
+  }
+  
+  next();
+}
 
 // Simple rate limiter middleware
 function rateLimit(maxRequests: number, windowMs: number) {
@@ -58,17 +76,62 @@ export async function registerRoutes(
   });
   
   // Health check endpoint (public - no auth required)
-  app.get("/api/health", async (_req: Request, res: Response) => {
+  app.get("/api/health", async (req: Request, res: Response) => {
     try {
-      const processorHealth = await getProcessorHealth();
-      res.json({
-        status: processorHealth.healthy ? "healthy" : "degraded",
-        timestamp: new Date().toISOString(),
-        processor: processorHealth,
-        limits: IMPORT_LIMITS,
-      });
+      // Support for detailed or simple health check
+      const detailed = req.query.detailed === "true";
+      
+      if (detailed) {
+        // Full system health with timeout protection
+        const systemHealth = await withTimeout(
+          getSystemHealth(),
+          5000,
+          "Health check timed out"
+        );
+        
+        res.json({
+          ...systemHealth,
+          authProvider: activeAuthProvider,
+          environment: {
+            SUPABASE_URL: !!process.env.SUPABASE_URL,
+            SUPABASE_ANON_KEY: !!process.env.SUPABASE_ANON_KEY,
+            SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+            SESSION_SECRET: !!process.env.SESSION_SECRET,
+            DATABASE_URL: !!process.env.DATABASE_URL,
+            APP_URL: !!process.env.APP_URL,
+            REPL_ID: !!process.env.REPL_ID,
+          },
+          limits: IMPORT_LIMITS,
+        });
+      } else {
+        // Simple health check for load balancers
+        const processorHealth = await getProcessorHealth();
+        
+        res.json({
+          status: processorHealth.healthy ? "healthy" : "degraded",
+          timestamp: new Date().toISOString(),
+          authProvider: activeAuthProvider,
+          environment: {
+            SUPABASE_URL: !!process.env.SUPABASE_URL,
+            SUPABASE_ANON_KEY: !!process.env.SUPABASE_ANON_KEY,
+            SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+            SESSION_SECRET: !!process.env.SESSION_SECRET,
+            DATABASE_URL: !!process.env.DATABASE_URL,
+            APP_URL: !!process.env.APP_URL,
+            REPL_ID: !!process.env.REPL_ID,
+          },
+          processor: processorHealth,
+          limits: IMPORT_LIMITS,
+        });
+      }
     } catch (error) {
-      res.status(500).json({ status: "unhealthy", error: "Health check failed" });
+      const categorized = categorizeError(error);
+      res.status(500).json({ 
+        status: "unhealthy", 
+        error: "Health check failed",
+        category: categorized.category,
+        isRecoverable: categorized.isRecoverable,
+      });
     }
   });
 
@@ -83,8 +146,8 @@ export async function registerRoutes(
     }
   });
 
-  // Get all jobs
-  app.get("/api/jobs", async (req: Request, res: Response) => {
+  // Get all jobs (protected)
+  app.get("/api/jobs", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
       const jobs = await storage.getBulkJobs(limit);
@@ -95,8 +158,8 @@ export async function registerRoutes(
     }
   });
 
-  // Get single job with stats
-  app.get("/api/jobs/:id", async (req: Request, res: Response) => {
+  // Get single job with stats (protected)
+  app.get("/api/jobs/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       
@@ -288,8 +351,8 @@ export async function registerRoutes(
     }
   });
 
-  // Single contact intake with rate limiting
-  app.post("/api/intake", rateLimit(30, 60000), async (req: Request, res: Response) => {
+  // Single contact intake with rate limiting and API key validation
+  app.post("/api/intake", validateApiKey, rateLimit(30, 60000), async (req: Request, res: Response) => {
     try {
       const { email, phone, firstName, lastName, company, title, linkedinUrl, ghlContactId, leadName, companyName, websiteUrl, city } = req.body;
 
@@ -371,8 +434,8 @@ export async function registerRoutes(
     }
   });
 
-  // Get all contacts with pagination
-  app.get("/api/contacts", async (req: Request, res: Response) => {
+  // Get all contacts with pagination (protected)
+  app.get("/api/contacts", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
       const contacts = await storage.getContacts(limit);
@@ -383,8 +446,8 @@ export async function registerRoutes(
     }
   });
 
-  // Get single contact
-  app.get("/api/contacts/:id", async (req: Request, res: Response) => {
+  // Get single contact (protected)
+  app.get("/api/contacts/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       

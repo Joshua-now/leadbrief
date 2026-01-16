@@ -1,0 +1,79 @@
+Freeze architecture: do not migrate to Next.js and do not change frameworks. Keep the current app stack as-is.
+
+Goal: “Production tighten + verify” for Railway so the app is stable and all APIs work.
+
+Do the following, in this order:
+
+Revert any partial Next.js migration changes and restore the last known-good Express/Vite build (use checkpoint restore if needed). Confirm npm run build and npm run start succeed locally and on Railway.
+
+Environment variable validation at boot:
+
+Add a small env.ts helper that checks required env vars and logs a clear warning if missing (but do not print secrets).
+
+Required: SUPABASE_URL, SUPABASE_ANON_KEY, SESSION_SECRET, APP_URL.
+
+Optional: SUPABASE_SERVICE_ROLE_KEY, DATABASE_URL, REDIS_URL (only if actually used).
+
+Kill Replit/OpenID auth on Railway:
+
+Ensure no openid-client / Replit Auth code runs in production.
+
+If any Replit-specific auth exists, hard-disable it unless REPLIT_DEPLOYMENT=true.
+
+App must not crash if REPL_ID is missing.
+
+API reliability checks:
+
+Confirm these endpoints exist and return correct status codes:
+
+GET /api/health → { ok: true, env: { ...presentFlags }, version }
+
+GET /api/config/limits (already exists) → 200
+
+POST /api/intake → requires X-API-KEY, returns jobId/leadId/status
+
+GET /api/jobs and GET /api/contacts → return 401 if unauthenticated, otherwise 200
+
+/settings route should not 404 (either real page or redirect/login)
+
+Session hardening:
+
+Ensure express-session has secret configured (fix deprecated warning).
+
+Cookie settings:
+
+httpOnly: true
+
+sameSite: 'lax'
+
+secure: true when behind HTTPS in production
+
+set trust proxy in Express for Railway.
+
+DB sanity:
+
+Add a small “smoke test” query to verify Supabase connection on GET /api/health (e.g., select 1 or count from leads) but keep it fast.
+
+If DB is unreachable, return { ok:false, db:false } with 200 (don’t crash server).
+
+Create a single command to verify everything:
+
+Add npm run verify that runs a script to hit the local server endpoints and prints PASS/FAIL (no new dependencies).
+
+The script should test:
+
+health ok
+
+intake with city persists to leads
+
+contacts/jobs protected without auth (401)
+
+Output:
+
+List exactly what you changed (file-by-file).
+
+Confirm Railway deploy boots cleanly.
+
+Show verify output.
+
+Absolutely do not change response formats or business logic—only stabilization, validation, and protections.
