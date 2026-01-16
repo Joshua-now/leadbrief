@@ -1,0 +1,98 @@
+Task: Do a final cleanup + stabilization pass on LeadBrief and make it verifiably working end-to-end.
+
+Current issues to fix (must all be resolved):
+
+/settings returns 404
+
+Contacts page says “failed to load contacts”
+
+Jobs page says “failed to load”
+
+App opens without login (auth guard not enforced)
+
+UI changed a lot recently — make sure navigation/routes match the UI and nothing is broken
+
+Hard requirements:
+
+Confirm all expected routes exist and match nav links:
+
+/login
+
+/dashboard (or /contacts, whichever is intended)
+
+/contacts (if used)
+
+/jobs
+
+/settings
+If any route is missing, add it (correct folder under /app).
+
+Fix auth properly:
+
+Unauthenticated users must be redirected to /login
+
+Authenticated users can access dashboard/contacts/jobs/settings
+
+No “auto-bypass” of login in production
+
+Fix contacts + jobs loading:
+
+Identify which API routes they call
+
+Ensure those API routes exist and return valid JSON
+
+Fix Supabase query permissions/RLS issues by using server-side routes with the service role key for admin pages (never expose service key to client)
+
+Add a health endpoint:
+
+GET /api/health
+
+Returns { ok: true, env: { ...booleans }, supabase: "ok" }
+
+Must run a lightweight Supabase query (e.g., select now()) so we know DB connectivity is real
+
+Do not print secrets
+
+Add an end-to-end verify script:
+
+Add npm run verify
+
+It should:
+
+call /api/health
+
+POST to /api/intake with a dummy lead including "city"
+
+confirm the lead is written (either by checking DB via server route or by fetching /api/report/:ghlContactId)
+
+print a clear PASS/FAIL summary with reasons
+
+General cleanup pass:
+
+Remove dead code, obvious console noise, broken links
+
+Ensure env var names are consistent everywhere:
+
+NEXT_PUBLIC_SUPABASE_URL
+
+NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+SUPABASE_SERVICE_ROLE_KEY
+
+NEXT_PUBLIC_APP_URL
+
+Definition of done:
+
+Settings works (no 404)
+
+Login is enforced
+
+Contacts & Jobs load
+
+npm run verify passes locally and on deployment
+
+Provide a short summary of fixes + the output of npm run verify
+
+If the agent comes back saying “done” but doesn’t show the verify output, tell it:
+
+“Run npm run verify and paste the output.”
