@@ -27,6 +27,7 @@ const ContactSchema = z.object({
   company: z.string().max(IMPORT_LIMITS.MAX_FIELD_LENGTH).optional(),
   companyDomain: z.string().max(IMPORT_LIMITS.MAX_FIELD_LENGTH).optional(),
   linkedinUrl: z.string().max(500).url().optional().or(z.literal('')),
+  city: z.string().max(IMPORT_LIMITS.MAX_FIELD_LENGTH).optional().or(z.literal('')),
 }).refine(
   (data) => data.email || data.phone || data.linkedinUrl,
   'At least email, phone, or LinkedIn URL required'
@@ -351,6 +352,7 @@ export class BulkInputHandler {
       company: ['company', 'company_name', 'organization', 'org', 'employer'],
       companyDomain: ['domain', 'website', 'company_domain', 'url', 'web'],
       linkedinUrl: ['linkedin', 'linkedin_url', 'linkedin_profile', 'linkedinurl'],
+      city: ['city', 'location', 'town', 'metro', 'area'],
     };
 
     Object.entries(row).forEach(([key, value]) => {
@@ -378,6 +380,7 @@ export class BulkInputHandler {
       company: ['company', 'company_name', 'organization', 'org'],
       companyDomain: ['domain', 'website', 'company_domain', 'url'],
       linkedinUrl: ['linkedin', 'linkedin_url', 'linkedinurl'],
+      city: ['city', 'location', 'town', 'metro', 'area'],
     };
 
     Object.keys(obj).forEach((key) => {
