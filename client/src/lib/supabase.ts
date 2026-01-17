@@ -3,10 +3,15 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 let supabaseClient: SupabaseClient | null = null;
 
 export function isSupabaseConfigured(): boolean {
-  return !!(
+  const configured = !!(
     import.meta.env.VITE_SUPABASE_URL && 
     import.meta.env.VITE_SUPABASE_ANON_KEY
   );
+  console.log('[Supabase] isConfigured:', configured, {
+    url: !!import.meta.env.VITE_SUPABASE_URL,
+    key: !!import.meta.env.VITE_SUPABASE_ANON_KEY,
+  });
+  return configured;
 }
 
 export function getSupabaseClient(): SupabaseClient | null {
@@ -15,9 +20,19 @@ export function getSupabaseClient(): SupabaseClient | null {
   }
   
   if (!supabaseClient) {
+    console.log('[Supabase] Creating client with persistence enabled');
     supabaseClient = createClient(
       import.meta.env.VITE_SUPABASE_URL,
-      import.meta.env.VITE_SUPABASE_ANON_KEY
+      import.meta.env.VITE_SUPABASE_ANON_KEY,
+      {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: false,
+          storage: localStorage,
+          storageKey: 'leadbrief-auth',
+        },
+      }
     );
   }
   
@@ -30,22 +45,36 @@ export async function signInWithEmail(email: string, password: string) {
     throw new Error('Supabase is not configured');
   }
   
+  console.log('[Supabase] Attempting sign in for:', email);
+  
   const { data, error } = await client.auth.signInWithPassword({
     email,
     password,
   });
   
   if (error) {
+    console.error('[Supabase] Sign in error:', error.message);
     throw error;
   }
   
+  console.log('[Supabase] Sign in successful, session:', !!data.session);
+  
   // Sync session with backend
   if (data.session) {
-    await fetch('/api/auth/supabase/session', {
+    console.log('[Supabase] Syncing session with backend...');
+    const response = await fetch('/api/auth/supabase/session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ access_token: data.session.access_token }),
     });
+    
+    const result = await response.json();
+    console.log('[Supabase] Backend session sync:', response.status, result);
+    
+    if (!response.ok) {
+      throw new Error(result.error || 'Failed to sync session with server');
+    }
   }
   
   return data;

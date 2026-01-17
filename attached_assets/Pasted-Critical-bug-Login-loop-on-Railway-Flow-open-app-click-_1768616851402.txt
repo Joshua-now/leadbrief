@@ -1,0 +1,80 @@
+Critical bug: Login loop on Railway.
+Flow: open app → click Sign In → Supabase login modal shows (credentials prefilled) → click Sign In → redirects back to homepage still not logged in. Repeat forever.
+
+Goal: Fix authentication so a valid Supabase user can log in and stay logged in on Railway.
+
+Required approach:
+
+Reproduce the bug locally in production mode:
+
+npm run build && npm run start
+
+Use the same env var names as Railway (including VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY for frontend).
+
+Instrument the auth flow (add logs, no secrets):
+
+On client: log supabase.auth.getSession() result on app load and after login attempt.
+
+On server: log when session cookies are set/cleared and the current auth provider mode.
+
+Identify which of these is happening and fix it:
+
+A) Supabase session isn’t being persisted (missing storage/cookies config, wrong auth client usage)
+
+B) Redirect URL mismatch (Supabase needs correct Site URL + Redirect URLs; app is redirecting to wrong place)
+
+C) Cookie/session not sticking (Express session cookie flags wrong behind Railway proxy; secure/sameSite mis-set)
+
+D) App route guard is wrong (home page always redirects to login because it never detects session)
+
+E) Using wrong Supabase keys on client (must be import.meta.env.VITE_SUPABASE_*, not server env)
+
+Concrete fixes to apply as needed:
+
+Ensure Express has app.set("trust proxy", 1) on Railway.
+
+Configure session cookie properly:
+
+httpOnly: true
+
+sameSite: "lax"
+
+secure: true in production (HTTPS)
+
+Ensure the client uses Supabase auth persistence:
+
+persistSession: true
+
+autoRefreshToken: true
+
+detectSessionInUrl: true (if using redirect-based OAuth; if not, confirm it’s not breaking)
+
+Ensure frontend reads:
+
+VITE_SUPABASE_URL
+
+VITE_SUPABASE_ANON_KEY
+
+Ensure backend uses SUPABASE_SERVICE_ROLE_KEY only server-side, never client.
+
+Verification (must do before marking done):
+
+Create or use a real Supabase Email/Password user.
+
+Log in on the Railway deployment.
+
+Refresh page → user stays logged in.
+
+Visit /contacts, /jobs, /settings → loads successfully (or correct auth redirect).
+
+Log out → session clears and protected routes redirect back to login.
+
+Deliverables:
+
+Explain the root cause of the loop (one sentence)
+
+List files changed
+
+Provide the exact Supabase dashboard settings required (Site URL + Redirect URLs) based on the Railway domain
+
+Provide the exact Railway env var list required (including VITE_ vars)
