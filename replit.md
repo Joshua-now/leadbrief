@@ -43,7 +43,7 @@ The backend uses a modular route registration pattern with dedicated storage abs
 ### Data Storage
 - **Database**: PostgreSQL with Drizzle ORM
 - **Schema Location**: `shared/schema.ts` - shared between frontend and backend
-- **Migrations**: Drizzle Kit for schema migrations stored in `/migrations`
+- **Schema Push**: Uses `npm run db:push` (no migration files needed)
 - **Key Tables**:
   - `users` - User accounts from Replit Auth
   - `sessions` - Session store for authentication
@@ -64,6 +64,7 @@ The backend uses a modular route registration pattern with dedicated storage abs
 - **Production Build**: 
   - Client: Vite builds to `dist/public`
   - Server: esbuild bundles to `dist/index.cjs` with selective dependency bundling
+  - **Important**: drizzle-orm and drizzle-zod are externalized (not bundled) to prevent migration code from triggering on startup
 - **TypeScript**: Shared configuration with path aliases (`@/*` for client, `@shared/*` for shared code)
 
 ## External Dependencies

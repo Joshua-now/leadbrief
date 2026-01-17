@@ -50,6 +50,10 @@ A bulk contact enrichment platform supporting CSV/JSON/XLSX imports with robust 
    - Go to [supabase.com](https://supabase.com)
    - Create a new project
    - Copy the URL and keys from Project Settings > API
+   - **Configure Supabase Dashboard**:
+     - Go to Authentication > URL Configuration
+     - Set Site URL: `https://your-app.up.railway.app`
+     - Add Redirect URLs: `https://your-app.up.railway.app/*`
 
 3. **Set environment variables** in Railway:
    ```bash
@@ -65,16 +69,23 @@ A bulk contact enrichment platform supporting CSV/JSON/XLSX imports with robust 
    NODE_ENV=production
    ```
    
-   > **Important**: The `VITE_` prefixed variables are required for the browser-side Supabase client. They must be set before the build step runs.
+   > **Important**: The `VITE_` prefixed variables are required for the browser-side Supabase client. They must be set BEFORE the build step runs (Vite bakes them into the bundle).
 
-4. **Build and start commands**:
-   - Build: `npm run build`
-   - Start: `npm run start`
-
-5. **Initialize database**:
+4. **Initialize database** (BEFORE first deploy):
+   
+   Use the Railway CLI or shell to run db:push BEFORE starting the app:
    ```bash
+   # From Railway shell or CLI with DATABASE_URL set
    npm run db:push
    ```
+   
+   > **Critical**: The database tables MUST exist before the app starts. If you skip this step, the app will crash on startup.
+
+5. **Build and start commands** (Railway service settings):
+   - Build command: `npm run build`
+   - Start command: `npm run start`
+
+6. **Redeploy** if db:push was run after initial deploy
 
 ### Auth Provider Detection
 
