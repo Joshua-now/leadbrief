@@ -35,6 +35,8 @@ A bulk contact enrichment platform supporting CSV/JSON/XLSX imports with robust 
 | `SUPABASE_URL` | Yes | Supabase project URL (e.g., `https://xxx.supabase.co`) |
 | `SUPABASE_ANON_KEY` | Yes | Supabase anonymous/public key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Recommended | Supabase service role key (for server operations) |
+| `VITE_SUPABASE_URL` | Yes | Same as SUPABASE_URL (required for client-side auth) |
+| `VITE_SUPABASE_ANON_KEY` | Yes | Same as SUPABASE_ANON_KEY (required for client-side auth) |
 | `APP_URL` | Recommended | Your app URL (e.g., `https://myapp.up.railway.app`) |
 | `API_KEY` | Optional | API key for `/api/intake` endpoint protection |
 | `DEBUG_KEY` | Recommended | Secret key for `/api/debug/lastlog` endpoint access |
@@ -56,10 +58,14 @@ A bulk contact enrichment platform supporting CSV/JSON/XLSX imports with robust 
    SUPABASE_URL=https://xxx.supabase.co
    SUPABASE_ANON_KEY=<your-anon-key>
    SUPABASE_SERVICE_ROLE_KEY=<your-service-role-key>
+   VITE_SUPABASE_URL=https://xxx.supabase.co
+   VITE_SUPABASE_ANON_KEY=<your-anon-key>
    APP_URL=https://your-app.up.railway.app
    DEBUG_KEY=<openssl rand -hex 16>
    NODE_ENV=production
    ```
+   
+   > **Important**: The `VITE_` prefixed variables are required for the browser-side Supabase client. They must be set before the build step runs.
 
 4. **Build and start commands**:
    - Build: `npm run build`
