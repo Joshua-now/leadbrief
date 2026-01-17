@@ -15,40 +15,23 @@ export function registerAuthRoutes(app: Express): void {
       });
     }
     
+    // Supabase auth - stateless, Bearer token only (no sessions)
     if (activeAuthProvider === 'supabase') {
       try {
-        const sessionUser = (req.session as any)?.user;
-        console.log("[Auth] Session user:", sessionUser ? { id: sessionUser.id, provider: sessionUser.provider } : null);
-        
-        if (sessionUser && sessionUser.provider === 'supabase') {
-          console.log("[Auth] Verifying stored access token...");
-          const result = await verifySupabaseToken(sessionUser.access_token);
-          if (result) {
-            console.log("[Auth] Token valid, returning user data");
-            const user = await authStorage.getUser(sessionUser.id);
-            if (user) {
-              return res.json(user);
-            }
-            return res.json({
-              id: sessionUser.id,
-              email: sessionUser.email,
-              firstName: null,
-              lastName: null,
-              profileImageUrl: null,
-            });
-          } else {
-            console.log("[Auth] Token verification failed, clearing session");
-            (req.session as any).user = null;
-          }
-        }
-        
         const authHeader = req.headers.authorization;
         if (authHeader?.startsWith('Bearer ')) {
-          console.log("[Auth] Trying Bearer token from header...");
           const token = authHeader.slice(7);
           const result = await verifySupabaseToken(token);
           if (result) {
-            console.log("[Auth] Bearer token valid");
+            // Upsert user to ensure they exist in database
+            await authStorage.upsertUser({
+              id: result.user.id,
+              email: result.user.email,
+              firstName: result.user.user_metadata?.first_name || result.user.user_metadata?.full_name?.split(' ')[0] || null,
+              lastName: result.user.user_metadata?.last_name || result.user.user_metadata?.full_name?.split(' ').slice(1).join(' ') || null,
+              profileImageUrl: result.user.user_metadata?.avatar_url || null,
+            });
+            
             const user = await authStorage.getUser(result.user.id);
             if (user) {
               return res.json(user);
@@ -63,7 +46,7 @@ export function registerAuthRoutes(app: Express): void {
           }
         }
         
-        console.log("[Auth] No valid session or token found");
+        console.log("[Auth] No valid Bearer token found");
         return res.status(401).json({ message: "Unauthorized" });
       } catch (error) {
         console.error("[Auth] Error fetching Supabase user:", error);

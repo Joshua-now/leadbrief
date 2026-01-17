@@ -59,23 +59,8 @@ export async function signInWithEmail(email: string, password: string) {
   
   console.log('[Supabase] Sign in successful, session:', !!data.session);
   
-  // Sync session with backend
-  if (data.session) {
-    console.log('[Supabase] Syncing session with backend...');
-    const response = await fetch('/api/auth/supabase/session', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ access_token: data.session.access_token }),
-    });
-    
-    const result = await response.json();
-    console.log('[Supabase] Backend session sync:', response.status, result);
-    
-    if (!response.ok) {
-      throw new Error(result.error || 'Failed to sync session with server');
-    }
-  }
+  // No server session sync needed - stateless JWT auth
+  // The access_token will be sent with each API request via Authorization header
   
   return data;
 }
@@ -118,6 +103,12 @@ export async function getSession() {
   
   const { data: { session } } = await client.auth.getSession();
   return session;
+}
+
+// Get access token for API requests
+export async function getAccessToken(): Promise<string | null> {
+  const session = await getSession();
+  return session?.access_token || null;
 }
 
 export async function getUser() {

@@ -1,9 +1,21 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { User } from "@shared/models/auth";
+import { getAccessToken, isSupabaseConfigured } from "@/lib/supabase";
 
 async function fetchUser(): Promise<User | null> {
+  const headers: HeadersInit = {};
+  
+  // Add Bearer token for Supabase auth
+  if (isSupabaseConfigured()) {
+    const token = await getAccessToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+  }
+  
   const response = await fetch("/api/auth/user", {
     credentials: "include",
+    headers,
   });
 
   if (response.status === 401) {

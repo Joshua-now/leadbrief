@@ -1,8 +1,8 @@
 import passport from "passport";
 import session from "express-session";
+import connectPg from "connect-pg-simple";
 import type { Express, RequestHandler, Request, Response, NextFunction } from "express";
 import memoize from "memoizee";
-import connectPg from "connect-pg-simple";
 import { authStorage } from "./storage";
 import { isSupabaseConfigured, verifySupabaseToken } from "../../lib/supabase";
 
@@ -18,13 +18,12 @@ export function isRailwayEnvironment(): boolean {
 // Check which auth providers are available
 export function checkReplitAuthEnabled(): boolean {
   const replId = process.env.REPL_ID;
-  const sessionSecret = process.env.SESSION_SECRET;
   const databaseUrl = process.env.DATABASE_URL;
-  return !!(replId && sessionSecret && databaseUrl);
+  return !!(replId && databaseUrl);
 }
 
 export function checkSupabaseAuthEnabled(): boolean {
-  return isSupabaseConfigured() && !!process.env.SESSION_SECRET;
+  return isSupabaseConfigured();
 }
 
 // Determine which auth system to use
@@ -53,40 +52,6 @@ export const isAuthEnabled = activeAuthProvider !== 'none';
 console.log(`[Auth] Environment: ${isReplitEnvironment() ? 'Replit' : isRailwayEnvironment() ? 'Railway' : 'Unknown'}`);
 console.log(`[Auth] Active provider: ${activeAuthProvider}`);
 
-export function getSession() {
-  const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
-  
-  const sessionSecret = process.env.SESSION_SECRET;
-  if (!sessionSecret && process.env.NODE_ENV === 'production') {
-    console.error('[Auth] SESSION_SECRET is required in production');
-    throw new Error('SESSION_SECRET environment variable is required');
-  }
-  
-  let store: session.Store | undefined;
-  if (process.env.DATABASE_URL) {
-    const pgStore = connectPg(session);
-    store = new pgStore({
-      conString: process.env.DATABASE_URL,
-      createTableIfMissing: true,
-      ttl: sessionTtl,
-      tableName: "sessions",
-    });
-  }
-  
-  return session({
-    secret: sessionSecret || 'dev-session-secret-change-in-production',
-    store,
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'lax' : 'lax',
-      maxAge: sessionTtl,
-    },
-  });
-}
-
 async function upsertSupabaseUser(user: any) {
   await authStorage.upsertUser({
     id: user.id,
@@ -99,14 +64,6 @@ async function upsertSupabaseUser(user: any) {
 
 export async function setupAuth(app: Express) {
   app.set("trust proxy", 1);
-  
-  // Only set up session if SESSION_SECRET is available
-  // (DATABASE_URL alone is not sufficient - we need the secret for signing)
-  if (process.env.SESSION_SECRET) {
-    app.use(getSession());
-  } else if (process.env.NODE_ENV === 'production') {
-    console.warn('[Auth] SESSION_SECRET not set - sessions will not work');
-  }
   
   // No auth configured - stub routes
   if (activeAuthProvider === 'none') {
@@ -130,9 +87,9 @@ export async function setupAuth(app: Express) {
     return;
   }
   
-  // Supabase Auth routes (Railway, external deployments)
+  // Supabase Auth routes (Railway, external deployments) - STATELESS, no sessions
   if (activeAuthProvider === 'supabase') {
-    console.log("[Auth] Setting up Supabase Auth routes");
+    console.log("[Auth] Setting up Supabase Auth routes (stateless JWT-only)");
     
     app.get("/api/login", (_req, res) => {
       res.json({ 
@@ -141,51 +98,27 @@ export async function setupAuth(app: Express) {
       });
     });
     
-    app.post("/api/auth/supabase/session", async (req: Request, res: Response) => {
+    // Token verification endpoint - no session storage, just validates and upserts user
+    app.post("/api/auth/supabase/verify", async (req: Request, res: Response) => {
       try {
-        console.log("[Auth] Supabase session sync request received");
         const { access_token } = req.body;
         
         if (!access_token) {
-          console.log("[Auth] Session sync: no access_token provided");
           return res.status(400).json({ error: "Access token required" });
         }
         
-        console.log("[Auth] Verifying Supabase token...");
         const result = await verifySupabaseToken(access_token);
         if (!result) {
-          console.log("[Auth] Session sync: token verification failed");
-          return res.status(401).json({ error: "Invalid token - server could not verify" });
+          return res.status(401).json({ error: "Invalid token" });
         }
         
-        console.log("[Auth] Token verified, setting session for user:", result.user.id);
-        (req.session as any).user = {
-          id: result.user.id,
-          email: result.user.email,
-          provider: 'supabase',
-          access_token,
-        };
-        
-        // Explicitly save session before responding
-        await new Promise<void>((resolve, reject) => {
-          req.session.save((err) => {
-            if (err) {
-              console.error("[Auth] Session save error:", err);
-              reject(err);
-            } else {
-              console.log("[Auth] Session saved successfully");
-              resolve();
-            }
-          });
-        });
-        
+        // Upsert user to database
         await upsertSupabaseUser(result.user);
-        console.log("[Auth] User upserted, session sync complete");
         
         res.json({ success: true, user: result.user });
       } catch (error: any) {
-        console.error("[Auth] Supabase session error:", error?.message || error);
-        res.status(500).json({ error: "Authentication failed" });
+        console.error("[Auth] Supabase verify error:", error?.message || error);
+        res.status(500).json({ error: "Verification failed" });
       }
     });
     
@@ -193,13 +126,9 @@ export async function setupAuth(app: Express) {
       res.redirect('/');
     });
     
-    app.get("/api/logout", (req, res) => {
-      req.session.destroy((err) => {
-        if (err) {
-          console.error("[Auth] Logout error:", err);
-        }
-        res.redirect('/');
-      });
+    app.get("/api/logout", (_req, res) => {
+      // Stateless - just redirect, client handles Supabase signout
+      res.redirect('/');
     });
     
     return;
@@ -209,6 +138,43 @@ export async function setupAuth(app: Express) {
   // This means REPL_ID is guaranteed to be defined
   if (activeAuthProvider === 'replit') {
     console.log("[Auth] Setting up Replit Auth");
+    
+    // Set up session for Replit Auth (passport requires sessions)
+    const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
+    const sessionSecret = process.env.SESSION_SECRET;
+    
+    // Fail fast if SESSION_SECRET not provided in production
+    if (!sessionSecret) {
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('SESSION_SECRET is required for Replit Auth in production');
+      }
+      console.warn('[Auth] SESSION_SECRET not set - using insecure dev secret (NOT FOR PRODUCTION)');
+    }
+    const secret = sessionSecret || 'dev-session-secret-not-for-production';
+    
+    let store: session.Store | undefined;
+    if (process.env.DATABASE_URL) {
+      const pgStore = connectPg(session);
+      store = new pgStore({
+        conString: process.env.DATABASE_URL,
+        createTableIfMissing: true,
+        ttl: sessionTtl,
+        tableName: "sessions",
+      });
+    }
+    
+    app.use(session({
+      secret,
+      store,
+      resave: false,
+      saveUninitialized: false,
+      cookie: {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: sessionTtl,
+      },
+    }));
     
     // Dynamic import to avoid loading openid-client on Railway
     const client = await import("openid-client");
@@ -321,17 +287,8 @@ export const isAuthenticated: RequestHandler = async (req: Request, res: Respons
     });
   }
   
-  // Supabase auth check
+  // Supabase auth check - stateless, Bearer token only
   if (activeAuthProvider === 'supabase') {
-    const sessionUser = (req.session as any)?.user;
-    if (sessionUser && sessionUser.provider === 'supabase') {
-      const result = await verifySupabaseToken(sessionUser.access_token);
-      if (result) {
-        (req as any).user = sessionUser;
-        return next();
-      }
-    }
-    
     const authHeader = req.headers.authorization;
     if (authHeader?.startsWith('Bearer ')) {
       const token = authHeader.slice(7);
