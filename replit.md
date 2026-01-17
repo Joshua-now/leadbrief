@@ -2,7 +2,21 @@
 
 ## Overview
 
-LeadBrief is a bulk contact enrichment platform that allows users to import, validate, and manage contact data. The application supports CSV, JSON, and email list imports with automatic field mapping and validation. Users can track import jobs, view enriched contacts, and access analytics reports.
+LeadBrief is a production-ready bulk contact enrichment platform that takes input lead lists (CSV/JSON/XLSX), scrapes websites, extracts structured business intelligence, generates grounded personalization notes, and outputs clean exports (JSON/CSV). Features dual authentication (Replit Auth for Replit environment, Supabase Auth for Railway deployment), comprehensive guardrails, and crash-proof logging.
+
+### Enrichment Pipeline
+The platform processes leads through a complete enrichment pipeline:
+1. **Import**: CSV/JSON/XLSX upload with field mapping and validation
+2. **Scrape**: Website scraping with 10s timeout, 2 retries, redirect handling
+3. **Parse**: Content extraction (services, industry, signals, contact data)
+4. **Personalize**: Grounded personalization bullets and icebreakers
+5. **Export**: CSV/JSON output with schema documentation
+
+### Confidence Scoring (0-1 scale)
+- **0.8-1.0**: Rich website content, multiple services, business signals
+- **0.6-0.8**: Good content, some services extracted
+- **0.4-0.6**: Thin content (access denied, minimal data)
+- **0.2-0.4**: No website or failed scrape, generic personalization
 
 ## User Preferences
 
