@@ -1,0 +1,115 @@
+ }
+  ]
+}
+      code: 'ETIMEDOUT',
+      syscall: 'connect',
+[HealthMonitor] System unhealthy: {"database":{"healthy":false,"latencyMs":134297,"error":""},"memory":{"used":28,"total":31,"percentUsed":89,"isHealthy":true},"processor":{"healthy":false,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+[Auth] /api/auth/user request, provider: supabase
+[Supabase Server] Creating Supabase client
+[Supabase Server] verifyToken success for user: 731baced-7680-4428-8d41-16c147197e17
+[Auth] /api/auth/user request, provider: supabase
+[Supabase Server] verifyToken success for user: 731baced-7680-4428-8d41-16c147197e17
+Error recovering stale jobs: AggregateError [ETIMEDOUT]: 
+      code: 'ETIMEDOUT',
+      syscall: 'connect',
+      address: '104.18.38.10',
+    at /app/node_modules/pg-pool/index.js:45:11
+      port: 5432
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async /app/node_modules/drizzle-orm/node-postgres/session.cjs:118:22
+    },
+    at async oe (/app/dist/index.cjs:4:15405)
+    Error: connect ETIMEDOUT 172.64.149.246:5432
+    at async ot (/app/dist/index.cjs:4:29116)
+        at createConnectionError (node:net:1652:14)
+    at async Timeout._onTimeout (/app/dist/index.cjs:4:29681) {
+        at afterConnectMultiple (node:net:1682:16) {
+  code: 'ETIMEDOUT',
+  [errors]: [
+      errno: -110,
+    Error: connect ETIMEDOUT 104.18.38.10:5432
+        at createConnectionError (node:net:1652:14)
+        at Timeout.internalConnectMultipleTimeout (node:net:1711:38)
+        at listOnTimeout (node:internal/timers:583:11)
+        at process.processTimers (node:internal/timers:519:7) {
+      errno: -110,
+      code: 'ETIMEDOUT',
+      syscall: 'connect',
+      address: '172.64.149.246',
+    }
+      port: 5432
+  ]
+}
+[HealthMonitor] System unhealthy: {"database":{"healthy":false,"latencyMs":134463,"error":""},"memory":{"used":30,"total":32,"percentUsed":94,"isHealthy":false},"processor":{"healthy":false,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+      code: 'ETIMEDOUT',
+[Auth] Error fetching Supabase user: AggregateError [ETIMEDOUT]: 
+    at /app/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async /app/node_modules/drizzle-orm/node-postgres/session.cjs:118:22
+    at async fe.upsertUser (/app/dist/index.cjs:4:19825)
+    at async /app/dist/index.cjs:4:26816 {
+  code: 'ETIMEDOUT',
+  [errors]: [
+    Error: connect ETIMEDOUT 104.18.38.10:5432
+        at createConnectionError (node:net:1652:14)
+        at Timeout.internalConnectMultipleTimeout (node:net:1711:38)
+        at listOnTimeout (node:internal/timers:583:11)
+        at process.processTimers (node:internal/timers:519:7) {
+      errno: -110,
+      code: 'ETIMEDOUT',
+      syscall: 'connect',
+      address: '104.18.38.10',
+      port: 5432
+    },
+    Error: connect ETIMEDOUT 172.64.149.246:5432
+        at createConnectionError (node:net:1652:14)
+        at afterConnectMultiple (node:net:1682:16) {
+      errno: -110,
+      syscall: 'connect',
+      address: '172.64.149.246',
+      port: 5432
+    }
+  ]
+}
+[Auth] Error fetching Supabase user: AggregateError [ETIMEDOUT]: 
+    at /app/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async /app/node_modules/drizzle-orm/node-postgres/session.cjs:118:22
+    at async fe.upsertUser (/app/dist/index.cjs:4:19825)
+    at async /app/dist/index.cjs:4:26816 {
+  code: 'ETIMEDOUT',
+  [errors]: [
+    Error: connect ETIMEDOUT 104.18.38.10:5432
+        at createConnectionError (node:net:1652:14)
+        at Timeout.internalConnectMultipleTimeout (node:net:1711:38)
+        at listOnTimeout (node:internal/timers:583:11)
+        at process.processTimers (node:internal/timers:519:7) {
+      errno: -110,
+      code: 'ETIMEDOUT',
+      syscall: 'connect',
+      address: '104.18.38.10',
+      port: 5432
+    },
+    Error: connect ETIMEDOUT 172.64.149.246:5432
+        at createConnectionError (node:net:1652:14)
+        at afterConnectMultiple (node:net:1682:16) {
+      errno: -110,
+      code: 'ETIMEDOUT',
+      syscall: 'connect',
+      address: '172.64.149.246',
+      port: 5432
+    }
+  ]
+}
+8:16:25 PM [express] GET /api/auth/user 500 in 135382ms :: {"message":"Failed to fetch user"}
+[HealthMonitor] System unhealthy: {"database":{"healthy":false,"latencyMs":134663,"error":""},"memory":{"used":30,"total":32,"percentUsed":93,"isHealthy":false},"processor":{"healthy":false,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+      errno: -110,
+Error recovering stale jobs: AggregateError [ETIMEDOUT]: 
+    at /app/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async /app/node_modules/drizzle-orm/node-postgres/session.cjs:118:22
+    at async oe (/app/dist/index.cjs:4:15405)
+    at async ot (/app/dist/index.cjs:4:29116)
+    at async Timeout._onTimeout (/app/dist/index.cjs:4:29681) {
+  code: 'ETIMEDOUT',
+  [errors]: [
