@@ -26,31 +26,51 @@ export function checkSupabaseAuthEnabled(): boolean {
   return isSupabaseConfigured();
 }
 
-// Determine which auth system to use
+// Determine which auth system to use - called lazily to ensure env vars are loaded
+let _cachedProvider: 'replit' | 'supabase' | 'none' | null = null;
+
 export function getActiveAuthProvider(): 'replit' | 'supabase' | 'none' {
+  if (_cachedProvider !== null) {
+    return _cachedProvider;
+  }
+  
+  // Log environment detection
+  const envType = isReplitEnvironment() ? 'Replit' : isRailwayEnvironment() ? 'Railway' : 'Unknown';
+  console.log(`[Auth] Environment: ${envType}`);
+  console.log(`[Auth] REPL_ID: ${process.env.REPL_ID ? 'YES' : 'NO'}`);
+  console.log(`[Auth] SUPABASE_URL: ${process.env.SUPABASE_URL ? 'YES' : 'NO'}`);
+  console.log(`[Auth] SUPABASE_ANON_KEY: ${process.env.SUPABASE_ANON_KEY ? 'YES' : 'NO'}`);
+  
   // On Replit with valid config, use Replit Auth
   if (isReplitEnvironment() && checkReplitAuthEnabled()) {
-    return 'replit';
+    _cachedProvider = 'replit';
+    console.log(`[Auth] Active provider: replit`);
+    return _cachedProvider;
   }
   
   // If Supabase is configured (Railway or anywhere), use Supabase
   if (checkSupabaseAuthEnabled()) {
-    return 'supabase';
+    _cachedProvider = 'supabase';
+    console.log(`[Auth] Active provider: supabase`);
+    return _cachedProvider;
   }
   
   // Fallback for Replit without proper config
   if (checkReplitAuthEnabled()) {
-    return 'replit';
+    _cachedProvider = 'replit';
+    console.log(`[Auth] Active provider: replit (fallback)`);
+    return _cachedProvider;
   }
   
-  return 'none';
+  _cachedProvider = 'none';
+  console.log(`[Auth] Active provider: none`);
+  return _cachedProvider;
 }
 
-export const activeAuthProvider = getActiveAuthProvider();
-export const isAuthEnabled = activeAuthProvider !== 'none';
-
-console.log(`[Auth] Environment: ${isReplitEnvironment() ? 'Replit' : isRailwayEnvironment() ? 'Railway' : 'Unknown'}`);
-console.log(`[Auth] Active provider: ${activeAuthProvider}`);
+// These are now getters that call the lazy function
+export function getIsAuthEnabled(): boolean {
+  return getActiveAuthProvider() !== 'none';
+}
 
 async function upsertSupabaseUser(user: any) {
   await authStorage.upsertUser({
