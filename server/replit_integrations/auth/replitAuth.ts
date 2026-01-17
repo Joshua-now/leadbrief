@@ -1,6 +1,4 @@
 import passport from "passport";
-import session from "express-session";
-import connectPg from "connect-pg-simple";
 import type { Express, RequestHandler, Request, Response, NextFunction } from "express";
 import memoize from "memoizee";
 import { authStorage } from "./storage";
@@ -161,6 +159,12 @@ export async function setupAuth(app: Express) {
   if (activeProvider === 'replit') {
     console.log("[Auth] Setting up Replit Auth");
     
+    // Dynamic imports to avoid loading session/oidc modules on Railway
+    const session = (await import("express-session")).default;
+    const connectPg = (await import("connect-pg-simple")).default;
+    const client = await import("openid-client");
+    const { Strategy } = await import("openid-client/passport");
+    
     // Set up session for Replit Auth (passport requires sessions)
     const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
     const sessionSecret = process.env.SESSION_SECRET;
@@ -174,7 +178,7 @@ export async function setupAuth(app: Express) {
     }
     const secret = sessionSecret || 'dev-session-secret-not-for-production';
     
-    let store: session.Store | undefined;
+    let store: any = undefined;
     if (process.env.DATABASE_URL) {
       const pgStore = connectPg(session);
       store = new pgStore({
@@ -197,10 +201,6 @@ export async function setupAuth(app: Express) {
         maxAge: sessionTtl,
       },
     }));
-    
-    // Dynamic import to avoid loading openid-client on Railway
-    const client = await import("openid-client");
-    const { Strategy } = await import("openid-client/passport");
     
     app.use(passport.initialize());
     app.use(passport.session());
