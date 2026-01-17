@@ -100,9 +100,12 @@ async function upsertSupabaseUser(user: any) {
 export async function setupAuth(app: Express) {
   app.set("trust proxy", 1);
   
-  // Always set up session if we have the config
-  if (process.env.SESSION_SECRET || process.env.DATABASE_URL) {
+  // Only set up session if SESSION_SECRET is available
+  // (DATABASE_URL alone is not sufficient - we need the secret for signing)
+  if (process.env.SESSION_SECRET) {
     app.use(getSession());
+  } else if (process.env.NODE_ENV === 'production') {
+    console.warn('[Auth] SESSION_SECRET not set - sessions will not work');
   }
   
   // No auth configured - stub routes
