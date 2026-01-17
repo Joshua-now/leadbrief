@@ -2,22 +2,20 @@ import { build as esbuild } from "esbuild";
 import { build as viteBuild } from "vite";
 import { rm, readFile } from "fs/promises";
 
-// server deps to bundle to reduce openat(2) syscalls
-// which helps cold start times
 // Dependencies to bundle for faster cold starts
 // IMPORTANT: Do NOT include drizzle-orm or drizzle-zod - they contain
 // migration code that triggers on bundle evaluation, causing startup crashes
+// IMPORTANT: Do NOT include express-session, connect-pg-simple, or openid-client
+// These are dynamically imported in replitAuth.ts and must be externalized
+// to avoid the MemoryStore warning on Railway/Supabase deployments
 const allowlist = [
   "@google/generative-ai",
   "axios",
-  "connect-pg-simple",
   "cors",
   "date-fns",
   "express",
   "express-rate-limit",
-  "express-session",
   "jsonwebtoken",
-  "memorystore",
   "multer",
   "nanoid",
   "nodemailer",
