@@ -69,11 +69,20 @@ export async function registerRoutes(
   registerAuthRoutes(app);
   
   // Auth config endpoint (public - tells frontend which auth provider to use)
+  // Also provides Supabase public config for runtime initialization
   app.get("/api/auth/config", (_req: Request, res: Response) => {
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+    
     res.json({
       provider: getActiveAuthProvider(),
       isEnabled: getIsAuthEnabled(),
       supabaseConfigured: isSupabaseConfigured(),
+      // Public Supabase config for frontend (anon key is designed to be public)
+      supabase: supabaseUrl && supabaseAnonKey ? {
+        url: supabaseUrl,
+        anonKey: supabaseAnonKey,
+      } : null,
     });
   });
   

@@ -1,0 +1,26 @@
+    at /app/node_modules/drizzle-orm/node-postgres/session.cjs:124:23
+10:14:20 PM [express] GET /api/auth/config 304 in 1ms :: {"provider":"supabase","isEnabled":true,"supabaseConfigured":true}
+[Auth] /api/auth/user request, provider: supabase
+    at Object.startActiveSpan (/app/node_modules/drizzle-orm/tracing.cjs:31:14)
+    at /app/node_modules/drizzle-orm/node-postgres/session.cjs:118:50
+    at Object.startActiveSpan (/app/node_modules/drizzle-orm/tracing.cjs:31:14)
+[Auth] /api/auth/user request, provider: supabase
+[Supabase Server] verifyToken success for user: 731baced-7680-4428-8d41-16c147197e17
+[Auth] Error fetching Supabase user: TypeError: Cannot read properties of undefined (reading 'searchParams')
+    at parse (/app/node_modules/pg-connection-string/index.js:39:30)
+    at new ConnectionParameters (/app/node_modules/pg/lib/connection-parameters.js:56:42)
+    at new Client (/app/node_modules/pg/lib/client.js:18:33)
+[Supabase Server] verifyToken success for user: 731baced-7680-4428-8d41-16c147197e17
+[Auth] Error fetching Supabase user: TypeError: Cannot read properties of undefined (reading 'searchParams')
+    at parse (/app/node_modules/pg-connection-string/index.js:39:30)
+    at new ConnectionParameters (/app/node_modules/pg/lib/connection-parameters.js:56:42)
+    at new Client (/app/node_modules/pg/lib/client.js:18:33)
+    at BoundPool.newClient (/app/node_modules/pg-pool/index.js:233:20)
+    at BoundPool.connect (/app/node_modules/pg-pool/index.js:227:10)
+    at BoundPool.query (/app/node_modules/pg-pool/index.js:411:10)
+    at /app/node_modules/drizzle-orm/node-postgres/session.cjs:124:23
+    at Object.startActiveSpan (/app/node_modules/drizzle-orm/tracing.cjs:31:14)
+    at /app/node_modules/drizzle-orm/node-postgres/session.cjs:118:50
+    at Object.startActiveSpan (/app/node_modules/drizzle-orm/tracing.cjs:31:14)
+10:14:21 PM [express] GET /api/auth/user 500 in 47ms :: {"message":"Failed to fetch user"}
+[HealthMonitor] System unhealthy: {"database":{"healthy":false,"latencyMs":3,"error":"Cannot read properties of undefined (reading 'searchParams')"},"memory":{"used":30,"total":31,"percentUsed":96,"isHealthy":false},"processor":{"healthy":false,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
