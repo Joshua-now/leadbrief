@@ -22,12 +22,14 @@ export interface IStorage {
   // Companies
   getCompany(id: string): Promise<Company | undefined>;
   getCompanyByDomain(domain: string): Promise<Company | undefined>;
+  getCompanyByName(name: string): Promise<Company | undefined>;
   createCompany(company: InsertCompany): Promise<Company>;
   upsertCompany(company: InsertCompany): Promise<Company>;
   
   // Contacts
   getContact(id: string): Promise<Contact | undefined>;
   getContactByEmail(email: string): Promise<Contact | undefined>;
+  getContactByCompanyAndCity(companyName: string, city: string): Promise<Contact | undefined>;
   getContacts(limit?: number): Promise<Contact[]>;
   createContact(contact: InsertContact): Promise<Contact>;
   upsertContact(contact: InsertContact): Promise<Contact>;
@@ -61,6 +63,11 @@ export class DatabaseStorage implements IStorage {
     return company || undefined;
   }
 
+  async getCompanyByName(name: string): Promise<Company | undefined> {
+    const [company] = await db.select().from(companies).where(eq(companies.name, name));
+    return company || undefined;
+  }
+
   async createCompany(company: InsertCompany): Promise<Company> {
     const [created] = await db.insert(companies).values(company).returning();
     return created;
@@ -90,6 +97,19 @@ export class DatabaseStorage implements IStorage {
   async getContactByEmail(email: string): Promise<Contact | undefined> {
     const [contact] = await db.select().from(contacts).where(eq(contacts.email, email.toLowerCase()));
     return contact || undefined;
+  }
+
+  async getContactByCompanyAndCity(companyName: string, city: string): Promise<Contact | undefined> {
+    const company = await this.getCompanyByName(companyName);
+    if (!company) return undefined;
+    const [contact] = await db
+      .select()
+      .from(contacts)
+      .where(eq(contacts.companyId, company.id));
+    if (contact && contact.city?.toLowerCase() === city.toLowerCase()) {
+      return contact;
+    }
+    return undefined;
   }
 
   async getContacts(limit = 100): Promise<Contact[]> {

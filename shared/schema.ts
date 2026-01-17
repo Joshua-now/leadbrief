@@ -66,6 +66,12 @@ export const bulkJobItems = pgTable("bulk_job_items", {
   nextRetryAt: timestamp("next_retry_at"),
   matchedContactId: uuid("matched_contact_id").references(() => contacts.id),
   matchConfidence: numeric("match_confidence"),
+  enrichmentData: jsonb("enrichment_data"),
+  scrapeSources: jsonb("scrape_sources"),
+  personalizationBullets: text("personalization_bullets").array(),
+  icebreaker: text("icebreaker"),
+  confidenceScore: numeric("confidence_score"),
+  confidenceRationale: text("confidence_rationale"),
 });
 
 export const enrichmentErrors = pgTable("enrichment_errors", {

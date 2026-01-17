@@ -1,4 +1,7 @@
 import { storage } from "../storage";
+import { scrapeWebsite, type ScrapeResult, type ScrapeSource } from "./scraper";
+import { extractBusinessIntelligence, calculateConfidenceScore } from "./content-parser";
+import { generatePersonalization } from "./personalization";
 
 // Track jobs currently being processed to prevent concurrent execution
 const processingJobs = new Set<string>();
@@ -43,7 +46,7 @@ function calculateDataQualityScore(data: Record<string, string | null | undefine
   return score;
 }
 
-// Process a single job item with retry logic
+// Process a single job item with retry logic and full enrichment pipeline
 async function processItem(
   item: {
     id: string;
@@ -76,13 +79,54 @@ async function processItem(
     }
   }
 
-  // Create company if needed
-  let companyId: string | null = null;
+  // Check for duplicates by company + city (if no email)
   const companyName = data.company || data.companyName;
-  if (companyName) {
+  if (!data.email && companyName && data.city) {
+    const existingByCompany = await storage.getContactByCompanyAndCity(companyName, data.city);
+    if (existingByCompany) {
+      await storage.updateBulkJobItem(item.id, {
+        status: "complete",
+        contactId: existingByCompany.id,
+        matchedContactId: existingByCompany.id,
+        matchConfidence: "80",
+      });
+      return { success: true, isDuplicate: true };
+    }
+  }
+
+  // STEP 1: Scrape website if available
+  const websiteUrl = data.companyDomain || data.websiteUrl || data.website || data.url;
+  let scrapeResult: ScrapeResult = {
+    success: false,
+    sources: [],
+    error: 'No website URL provided',
+  };
+  
+  if (websiteUrl) {
+    console.log(`[Enrichment] Scraping website for item ${item.id}: ${websiteUrl}`);
+    scrapeResult = await scrapeWebsite(websiteUrl);
+  }
+
+  // STEP 2: Extract business intelligence from scraped content
+  const businessIntel = extractBusinessIntelligence(scrapeResult, data);
+  
+  // STEP 3: Generate personalization based on scraped content
+  const personalization = generatePersonalization(businessIntel, scrapeResult, data);
+  
+  // STEP 4: Calculate confidence score
+  const { score: confidenceScore, rationale: confidenceRationale } = calculateConfidenceScore(
+    scrapeResult,
+    businessIntel,
+    data
+  );
+
+  // Create company if needed (enrich with scraped data)
+  let companyId: string | null = null;
+  const finalCompanyName = businessIntel.companyName || companyName;
+  if (finalCompanyName) {
     const company = await storage.upsertCompany({
-      name: companyName,
-      domain: data.companyDomain || data.websiteUrl || null,
+      name: finalCompanyName,
+      domain: websiteUrl || null,
     });
     companyId = company.id;
   }
@@ -99,25 +143,51 @@ async function processItem(
     lastName = nameParts.slice(1).join(" ") || null;
   }
 
+  // Merge city/state from enrichment if not in input
+  const finalCity = data.city || businessIntel.city || null;
+
   // Create contact with validated data
   const contact = await storage.createContact({
     email: data.email || null,
-    phone: data.phone || null,
+    phone: data.phone || businessIntel.contactInfo.phone || null,
     firstName: firstName || null,
     lastName: lastName || null,
     title: data.title || null,
-    city: data.city || null,
+    city: finalCity,
     companyId,
     linkedinUrl: data.linkedinUrl || null,
     dataQualityScore: String(qualityScore),
   });
 
+  // Build enrichment data object
+  const enrichmentData = {
+    companyName: businessIntel.companyName,
+    city: businessIntel.city,
+    state: businessIntel.state,
+    services: businessIntel.services,
+    signals: businessIntel.signals,
+    industry: businessIntel.industry,
+    foundedYear: businessIntel.foundedYear,
+    contactInfo: businessIntel.contactInfo,
+    websiteTitle: scrapeResult.content?.title || null,
+    websiteDescription: scrapeResult.content?.description || null,
+  };
+
+  // Update job item with full enrichment data
   await storage.updateBulkJobItem(item.id, {
     status: "complete",
     contactId: contact.id,
     companyId,
     fitScore: String(qualityScore),
+    enrichmentData: JSON.parse(JSON.stringify(enrichmentData)),
+    scrapeSources: JSON.parse(JSON.stringify(scrapeResult.sources)),
+    personalizationBullets: personalization.bullets,
+    icebreaker: personalization.icebreaker,
+    confidenceScore: String(confidenceScore),
+    confidenceRationale,
   });
+
+  console.log(`[Enrichment] Completed item ${item.id}: confidence=${confidenceScore}, bullets=${personalization.bullets.length}`);
 
   return { success: true, isDuplicate: false };
 }

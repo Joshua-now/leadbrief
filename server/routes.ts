@@ -546,5 +546,146 @@ export async function registerRoutes(
     }
   });
 
+  // Export job results (CSV or JSON)
+  app.get("/api/jobs/:id/export", async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const format = (req.query.format as string) || 'json';
+      
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+        return res.status(400).json({ error: "Invalid job ID format" });
+      }
+
+      const job = await storage.getBulkJob(id);
+      if (!job) {
+        return res.status(404).json({ error: "Job not found" });
+      }
+
+      const items = await storage.getBulkJobItems(id);
+      
+      // Build export records with required fields
+      const exportRecords = items
+        .filter(item => item.status === 'complete')
+        .map(item => {
+          const parsed = item.parsedData as Record<string, string> | null;
+          const enrichment = item.enrichmentData as Record<string, unknown> | null;
+          const sources = item.scrapeSources as Array<{ url: string; statusCode: number; success: boolean; error?: string }> | null;
+          
+          return {
+            company_name: enrichment?.companyName || parsed?.company || parsed?.companyName || null,
+            website: parsed?.companyDomain || parsed?.websiteUrl || parsed?.website || null,
+            city: enrichment?.city || parsed?.city || null,
+            state: enrichment?.state || null,
+            category: enrichment?.industry || null,
+            services: (enrichment?.services as string[])?.join(', ') || null,
+            personalization_bullets: item.personalizationBullets || [],
+            icebreaker: item.icebreaker || null,
+            confidence_score: item.confidenceScore ? parseFloat(item.confidenceScore) : 0,
+            confidence_rationale: item.confidenceRationale || null,
+            scrape_sources: sources || [],
+            email: parsed?.email || null,
+            phone: parsed?.phone || null,
+            first_name: parsed?.firstName || null,
+            last_name: parsed?.lastName || null,
+            title: parsed?.title || null,
+          };
+        });
+
+      if (format === 'csv') {
+        // Generate CSV
+        const headers = [
+          'company_name', 'website', 'city', 'state', 'category', 'services',
+          'personalization_bullet_1', 'personalization_bullet_2', 'personalization_bullet_3', 'personalization_bullet_4',
+          'icebreaker', 'confidence_score', 'confidence_rationale',
+          'scrape_url', 'scrape_status',
+          'email', 'phone', 'first_name', 'last_name', 'title'
+        ];
+        
+        const csvRows = [headers.join(',')];
+        
+        for (const record of exportRecords) {
+          const bullets = record.personalization_bullets || [];
+          const source = record.scrape_sources[0] || { url: '', statusCode: 0 };
+          
+          const row = [
+            escapeCSV(record.company_name as string | null),
+            escapeCSV(record.website as string | null),
+            escapeCSV(record.city as string | null),
+            escapeCSV(record.state as string | null),
+            escapeCSV(record.category as string | null),
+            escapeCSV(record.services as string | null),
+            escapeCSV(bullets[0] || ''),
+            escapeCSV(bullets[1] || ''),
+            escapeCSV(bullets[2] || ''),
+            escapeCSV(bullets[3] || ''),
+            escapeCSV(record.icebreaker),
+            record.confidence_score.toString(),
+            escapeCSV(record.confidence_rationale),
+            escapeCSV(source.url),
+            source.statusCode?.toString() || '',
+            escapeCSV(record.email),
+            escapeCSV(record.phone),
+            escapeCSV(record.first_name),
+            escapeCSV(record.last_name),
+            escapeCSV(record.title),
+          ];
+          csvRows.push(row.join(','));
+        }
+        
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename="export-${id}.csv"`);
+        res.send(csvRows.join('\n'));
+      } else {
+        // JSON export with schema metadata
+        res.json({
+          job: {
+            id: job.id,
+            name: job.name,
+            status: job.status,
+            totalRecords: job.totalRecords,
+            successful: job.successful,
+            failed: job.failed,
+            duplicatesFound: job.duplicatesFound,
+            createdAt: job.createdAt,
+            completedAt: job.completedAt,
+          },
+          schema: {
+            company_name: 'string | null',
+            website: 'string | null',
+            city: 'string | null',
+            state: 'string | null',
+            category: 'string | null',
+            services: 'string | null (comma-separated)',
+            personalization_bullets: 'string[] (2-4 items)',
+            icebreaker: 'string | null',
+            confidence_score: 'number (0-1)',
+            confidence_rationale: 'string | null',
+            scrape_sources: 'Array<{url: string, statusCode: number, success: boolean, error?: string}>',
+            email: 'string | null',
+            phone: 'string | null',
+            first_name: 'string | null',
+            last_name: 'string | null',
+            title: 'string | null',
+          },
+          records: exportRecords,
+          exportedAt: new Date().toISOString(),
+        });
+      }
+    } catch (error) {
+      console.error("Export error:", error);
+      res.status(500).json({ error: "Export failed" });
+    }
+  });
+
   return httpServer;
+}
+
+// Helper function to escape CSV values
+function escapeCSV(value: string | null | undefined): string {
+  if (value === null || value === undefined) return '';
+  const str = String(value);
+  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
 }

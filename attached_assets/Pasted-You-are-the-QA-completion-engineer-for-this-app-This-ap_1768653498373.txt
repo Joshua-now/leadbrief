@@ -1,0 +1,68 @@
+You are the QA + completion engineer for this app. This app’s scope is NOT sending emails. Its scope is:
+1) Take an input lead list (multiple formats),
+2) Research/scrape the lead sources (website + any configured data sources),
+3) Extract structured business intelligence (name, city, services, signals),
+4) Generate grounded personalization notes (NO hallucinations),
+5) Output a clean export (JSON/CSV) for handoff to another system.
+
+Your job is to finish the app to that scope and prove it works with a comprehensive test plan + execution. Do NOT expand scope to email sending. Do NOT ask me what to test—inspect the repo and cover everything.
+
+Deliverables (must provide all):
+A) Feature inventory: list every route/job/module and what it’s supposed to do.
+B) Test Matrix table: subsystem -> test case -> input -> expected output -> pass/fail criteria.
+C) Execute a full “Critical Path” run:
+   - ingest leads -> normalize -> dedupe -> scrape -> parse -> enrich -> generate personalization -> export
+   - show sample inputs and the resulting structured outputs (at least 5 leads) with proof (logs/screenshots/snippets).
+D) Edge case tests:
+   - missing website
+   - invalid URL
+   - 403/404/timeouts
+   - redirects
+   - duplicates by email/website/company+city
+   - empty scrape results
+   - dirty input delimiters (pipes, commas, tabs, line breaks)
+   - batch processing partial failures
+E) Non-functional:
+   - performance on 25–100 leads (batching + concurrency)
+   - retry/backoff behavior
+   - observability: logs per lead per stage with clear errors
+   - security: secrets not logged, config via env vars
+F) Completion work:
+   - If any failures/blockers are found, implement fixes and re-run the critical path until GREEN.
+G) Handoff artifact:
+   - Provide export formats: CSV and JSON
+   - Provide a schema definition for the export (field names, types)
+   - Provide a “How to run” command list so I can reproduce quickly.
+
+Hard requirements for output quality:
+1) Personalization must be grounded in scraped content (website text, metadata, structured fields). No invented claims.
+2) If a lead has thin data, output generic-but-valid personalization and mark confidence low.
+3) Each lead output must include:
+   - company_name
+   - website (if available)
+   - city/state (if available)
+   - category/services (if available)
+   - 2–4 personalization bullets
+   - 1 icebreaker sentence
+   - confidence score (0–1) + rationale
+   - scrape_sources: list of URLs visited and status codes
+4) The app must be idempotent: re-running the same list should not duplicate outputs (or it should overwrite deterministically).
+
+Testing dataset (create locally in the app for repeatability):
+- Make a 15-lead dataset with:
+  - 5 leads with websites that are reachable
+  - 3 leads with websites that redirect
+  - 2 leads that return 403/404
+  - 2 leads missing websites (only company + city)
+  - 3 duplicates across email/website/company+city
+Use real public business sites when safe, otherwise create fixtures and mock HTTP.
+
+Execution instructions:
+1) Read the repo and identify ingestion formats + scrape/enrich pipeline.
+2) Produce Feature Inventory and Test Matrix.
+3) Run the Critical Path with real outputs.
+4) Run edge/non-functional tests.
+5) Fix anything blocking Critical Path and re-run.
+6) End with a Release Readiness report: what passed, what failed, what remains.
+
+Do not stop early. Do not propose future work instead of completing this. Finish the job to GREEN or list exact code-level blockers with file paths and line refs.
