@@ -5,7 +5,7 @@ import { storage } from "./storage";
 import { BulkInputHandler, IMPORT_LIMITS } from "./lib/input-handler";
 import { processJobItems, recoverStaleJobs, getProcessorHealth } from "./lib/job-processor";
 import { parseFile } from "./lib/file-parser";
-import { setupAuth, registerAuthRoutes, isAuthenticated, activeAuthProvider, isAuthEnabled } from "./replit_integrations/auth";
+import { setupAuth, registerAuthRoutes, isAuthenticated, getActiveAuthProvider, getIsAuthEnabled } from "./replit_integrations/auth";
 import { isSupabaseConfigured } from "./lib/supabase";
 import { db } from "./db";
 import { getSystemHealth, withTimeout, categorizeError } from "./lib/guardrails";
@@ -71,8 +71,8 @@ export async function registerRoutes(
   // Auth config endpoint (public - tells frontend which auth provider to use)
   app.get("/api/auth/config", (_req: Request, res: Response) => {
     res.json({
-      provider: activeAuthProvider,
-      isEnabled: isAuthEnabled,
+      provider: getActiveAuthProvider(),
+      isEnabled: getIsAuthEnabled(),
       supabaseConfigured: isSupabaseConfigured(),
     });
   });
@@ -111,7 +111,7 @@ export async function registerRoutes(
           ok: systemHealth.status === "healthy" && dbOk,
           ...systemHealth,
           version,
-          authProvider: activeAuthProvider,
+          authProvider: getActiveAuthProvider(),
           db: dbOk,
           dbLatencyMs,
           env: envFlags,
@@ -127,7 +127,7 @@ export async function registerRoutes(
           status: isHealthy ? "healthy" : "degraded",
           timestamp: new Date().toISOString(),
           version,
-          authProvider: activeAuthProvider,
+          authProvider: getActiveAuthProvider(),
           db: dbOk,
           dbLatencyMs,
           env: envFlags,

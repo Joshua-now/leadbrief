@@ -1,13 +1,14 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { authStorage } from "./storage";
-import { activeAuthProvider, isAuthEnabled } from "./replitAuth";
+import { getActiveAuthProvider, getIsAuthEnabled } from "./replitAuth";
 import { verifySupabaseToken } from "../../lib/supabase";
 
 export function registerAuthRoutes(app: Express): void {
   app.get("/api/auth/user", async (req: Request, res: Response, next: NextFunction) => {
+    const activeAuthProvider = getActiveAuthProvider();
     console.log("[Auth] /api/auth/user request, provider:", activeAuthProvider);
     
-    if (!isAuthEnabled) {
+    if (!getIsAuthEnabled()) {
       console.log("[Auth] Auth not enabled");
       return res.status(501).json({ 
         error: "Authentication not configured",

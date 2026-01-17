@@ -85,8 +85,10 @@ async function upsertSupabaseUser(user: any) {
 export async function setupAuth(app: Express) {
   app.set("trust proxy", 1);
   
+  const activeProvider = getActiveAuthProvider();
+  
   // No auth configured - stub routes
-  if (activeAuthProvider === 'none') {
+  if (activeProvider === 'none') {
     console.log("[Auth] No auth provider configured - auth endpoints will be disabled");
     
     app.get("/api/login", (_req, res) => {
@@ -108,7 +110,7 @@ export async function setupAuth(app: Express) {
   }
   
   // Supabase Auth routes (Railway, external deployments) - STATELESS, no sessions
-  if (activeAuthProvider === 'supabase') {
+  if (activeProvider === 'supabase') {
     console.log("[Auth] Setting up Supabase Auth routes (stateless JWT-only)");
     
     app.get("/api/login", (_req, res) => {
@@ -154,9 +156,9 @@ export async function setupAuth(app: Express) {
     return;
   }
   
-  // Replit Auth setup - ONLY runs when activeAuthProvider === 'replit'
+  // Replit Auth setup - ONLY runs when activeProvider === 'replit'
   // This means REPL_ID is guaranteed to be defined
-  if (activeAuthProvider === 'replit') {
+  if (activeProvider === 'replit') {
     console.log("[Auth] Setting up Replit Auth");
     
     // Set up session for Replit Auth (passport requires sessions)
@@ -300,7 +302,7 @@ export async function setupAuth(app: Express) {
 }
 
 export const isAuthenticated: RequestHandler = async (req: Request, res: Response, next: NextFunction) => {
-  if (!isAuthEnabled) {
+  if (!getIsAuthEnabled()) {
     return res.status(501).json({ 
       error: "Authentication not configured",
       message: "Protected endpoints require authentication which is not configured."
@@ -308,7 +310,7 @@ export const isAuthenticated: RequestHandler = async (req: Request, res: Respons
   }
   
   // Supabase auth check - stateless, Bearer token only
-  if (activeAuthProvider === 'supabase') {
+  if (getActiveAuthProvider() === 'supabase') {
     const authHeader = req.headers.authorization;
     if (authHeader?.startsWith('Bearer ')) {
       const token = authHeader.slice(7);
