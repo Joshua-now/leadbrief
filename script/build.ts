@@ -8,6 +8,10 @@ import { rm, readFile } from "fs/promises";
 // IMPORTANT: Do NOT include express-session, connect-pg-simple, or openid-client
 // These are dynamically imported in replitAuth.ts and must be externalized
 // to avoid the MemoryStore warning on Railway/Supabase deployments
+// Dependencies to bundle for faster cold starts
+// NOTE: Some packages are externalized due to bundling issues:
+// - xlsx: Has streaming code that fails when bundled
+// - zod/zod-validation-error: Can cause issues when bundled with xlsx in some environments
 const allowlist = [
   "@google/generative-ai",
   "axios",
@@ -26,9 +30,6 @@ const allowlist = [
   "stripe",
   "uuid",
   "ws",
-  "xlsx",
-  "zod",
-  "zod-validation-error",
 ];
 
 async function buildAll() {
