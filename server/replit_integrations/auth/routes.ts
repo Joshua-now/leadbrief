@@ -5,7 +5,10 @@ import { verifySupabaseToken } from "../../lib/supabase";
 
 export function registerAuthRoutes(app: Express): void {
   app.get("/api/auth/user", async (req: Request, res: Response, next: NextFunction) => {
+    console.log("[Auth] /api/auth/user request, provider:", activeAuthProvider);
+    
     if (!isAuthEnabled) {
+      console.log("[Auth] Auth not enabled");
       return res.status(501).json({ 
         error: "Authentication not configured",
         message: "No authentication provider is configured."
@@ -15,10 +18,13 @@ export function registerAuthRoutes(app: Express): void {
     if (activeAuthProvider === 'supabase') {
       try {
         const sessionUser = (req.session as any)?.user;
+        console.log("[Auth] Session user:", sessionUser ? { id: sessionUser.id, provider: sessionUser.provider } : null);
         
         if (sessionUser && sessionUser.provider === 'supabase') {
+          console.log("[Auth] Verifying stored access token...");
           const result = await verifySupabaseToken(sessionUser.access_token);
           if (result) {
+            console.log("[Auth] Token valid, returning user data");
             const user = await authStorage.getUser(sessionUser.id);
             if (user) {
               return res.json(user);
@@ -31,15 +37,18 @@ export function registerAuthRoutes(app: Express): void {
               profileImageUrl: null,
             });
           } else {
+            console.log("[Auth] Token verification failed, clearing session");
             (req.session as any).user = null;
           }
         }
         
         const authHeader = req.headers.authorization;
         if (authHeader?.startsWith('Bearer ')) {
+          console.log("[Auth] Trying Bearer token from header...");
           const token = authHeader.slice(7);
           const result = await verifySupabaseToken(token);
           if (result) {
+            console.log("[Auth] Bearer token valid");
             const user = await authStorage.getUser(result.user.id);
             if (user) {
               return res.json(user);
@@ -54,9 +63,10 @@ export function registerAuthRoutes(app: Express): void {
           }
         }
         
+        console.log("[Auth] No valid session or token found");
         return res.status(401).json({ message: "Unauthorized" });
       } catch (error) {
-        console.error("Error fetching Supabase user:", error);
+        console.error("[Auth] Error fetching Supabase user:", error);
         return res.status(500).json({ message: "Failed to fetch user" });
       }
     }

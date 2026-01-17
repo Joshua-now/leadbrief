@@ -140,17 +140,22 @@ export async function setupAuth(app: Express) {
     
     app.post("/api/auth/supabase/session", async (req: Request, res: Response) => {
       try {
+        console.log("[Auth] Supabase session sync request received");
         const { access_token } = req.body;
         
         if (!access_token) {
+          console.log("[Auth] Session sync: no access_token provided");
           return res.status(400).json({ error: "Access token required" });
         }
         
+        console.log("[Auth] Verifying Supabase token...");
         const result = await verifySupabaseToken(access_token);
         if (!result) {
-          return res.status(401).json({ error: "Invalid token" });
+          console.log("[Auth] Session sync: token verification failed");
+          return res.status(401).json({ error: "Invalid token - server could not verify" });
         }
         
+        console.log("[Auth] Token verified, setting session for user:", result.user.id);
         (req.session as any).user = {
           id: result.user.id,
           email: result.user.email,
@@ -158,11 +163,25 @@ export async function setupAuth(app: Express) {
           access_token,
         };
         
+        // Explicitly save session before responding
+        await new Promise<void>((resolve, reject) => {
+          req.session.save((err) => {
+            if (err) {
+              console.error("[Auth] Session save error:", err);
+              reject(err);
+            } else {
+              console.log("[Auth] Session saved successfully");
+              resolve();
+            }
+          });
+        });
+        
         await upsertSupabaseUser(result.user);
+        console.log("[Auth] User upserted, session sync complete");
         
         res.json({ success: true, user: result.user });
-      } catch (error) {
-        console.error("[Auth] Supabase session error:", error);
+      } catch (error: any) {
+        console.error("[Auth] Supabase session error:", error?.message || error);
         res.status(500).json({ error: "Authentication failed" });
       }
     });
