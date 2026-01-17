@@ -2,35 +2,9 @@ import { build as esbuild } from "esbuild";
 import { build as viteBuild } from "vite";
 import { rm, readFile } from "fs/promises";
 
-// Dependencies to bundle for faster cold starts
-// IMPORTANT: Do NOT include drizzle-orm or drizzle-zod - they contain
-// migration code that triggers on bundle evaluation, causing startup crashes
-// IMPORTANT: Do NOT include express-session, connect-pg-simple, or openid-client
-// These are dynamically imported in replitAuth.ts and must be externalized
-// to avoid the MemoryStore warning on Railway/Supabase deployments
-// Dependencies to bundle for faster cold starts
-// NOTE: Some packages are externalized due to bundling issues:
-// - xlsx: Has streaming code that fails when bundled
-// - zod/zod-validation-error: Can cause issues when bundled with xlsx in some environments
-const allowlist = [
-  "@google/generative-ai",
-  "axios",
-  "cors",
-  "date-fns",
-  "express",
-  "express-rate-limit",
-  "jsonwebtoken",
-  "multer",
-  "nanoid",
-  "nodemailer",
-  "openai",
-  "passport",
-  "passport-local",
-  "pg",
-  "stripe",
-  "uuid",
-  "ws",
-];
+// For Railway/external deployment: Externalize ALL dependencies
+// This ensures all packages load from node_modules at runtime
+// which avoids bundling issues with complex packages like xlsx, zod, etc.
 
 async function buildAll() {
   await rm("dist", { recursive: true, force: true });
@@ -44,7 +18,6 @@ async function buildAll() {
     ...Object.keys(pkg.dependencies || {}),
     ...Object.keys(pkg.devDependencies || {}),
   ];
-  const externals = allDeps.filter((dep) => !allowlist.includes(dep));
 
   await esbuild({
     entryPoints: ["server/index.ts"],
@@ -56,7 +29,7 @@ async function buildAll() {
       "process.env.NODE_ENV": '"production"',
     },
     minify: true,
-    external: externals,
+    external: allDeps, // Externalize ALL dependencies
     logLevel: "info",
   });
 }
