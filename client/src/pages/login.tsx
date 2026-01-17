@@ -7,6 +7,7 @@ import { FileText, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { signInWithEmail, signUpWithEmail, isSupabaseConfigured } from "@/lib/supabase";
 import { useLocation } from "wouter";
+import { queryClient } from "@/lib/queryClient";
 
 type AuthConfig = {
   provider: 'replit' | 'supabase' | 'none';
@@ -53,8 +54,12 @@ export default function LoginPage() {
           title: "Signed in",
           description: "Welcome back!",
         });
-        setLocation("/");
-        window.location.reload();
+        // Clear auth cache to force refetch with new session
+        await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+        // Small delay to ensure session is persisted
+        await new Promise(resolve => setTimeout(resolve, 100));
+        // Navigate and reload to pick up new auth state
+        window.location.href = "/";
       }
     } catch (error: any) {
       toast({
