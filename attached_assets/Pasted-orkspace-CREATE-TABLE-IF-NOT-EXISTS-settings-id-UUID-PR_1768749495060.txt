@@ -1,0 +1,51 @@
+orkspace$ CREATE TABLE IF NOT EXISTS settings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  webhook_url TEXT,
+  api_key_enabled BOOLEAN DEFAULT FALSE,
+  email_notifications BOOLEAN DEFAULT FALSE,
+  auto_retry_enabled BOOLEAN DEFAULT TRUE,
+  max_retries INTEGER DEFAULT 3
+);
+bash: syntax error near unexpected token `('
+bash: syntax error near unexpected token `('
+bash: syntax error near unexpected token `('
+bash: syntax error near unexpected token `('
+bash: webhook_url: command not found
+bash: api_key_enabled: command not found
+bash: email_notifications: command not found
+bash: auto_retry_enabled: command not found
+bash: max_retries: command not found
+bash: syntax error near unexpected token `)'
+~/workspace$ # 1. Intake WITHOUT key (should return 401)
+curl -X POST https://leadbrief-production.up.railway.app/api/intake \
+  -H "Content-Type: application/json" \
+  -d '{"email":"nokey-test@example.com"}'
+
+# 2. Intake WITH correct key (should return 200 success)
+curl -X POST https://leadbrief-production.up.railway.app/api/intake \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_API_INTAKE_KEY" \
+  -d '{"email":"withkey-test@example.com"}'
+
+# 3. Final verification (should return ok:true with all tests passing)
+curl https://leadbrief-production.up.railway.app/api/finalcheck
+{"success":true,"contactId":"dde380ad-072d-420d-b4b4-86f34c68f404","jobId":"de135522-64fd-4fc6-b1d4-4be179886366","status":"complete"}{"success":true,"contactId":"3e0ec682-e1ec-41d8-8b71-eae06494ecf3","jobId":"fd073320-47a5-4231-bbf5-8ad54afb7fdc","status":"complete"}<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <title>LeadBrief - Bulk Enrichment Platform</title>
+    <meta name="description" content="Import, enrich, and manage your contact data with LeadBrief. Support for CSV, JSON, and email list imports with automatic field mapping." />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=JetBrains+Mono:wght@100..800&display=swap" rel="stylesheet">
+    <script type="module" crossorigin src="/assets/index-Df1NcWM-.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-lvzPSL8r.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
