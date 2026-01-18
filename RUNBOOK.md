@@ -315,6 +315,32 @@ npx drizzle-kit studio
 ### Direct SQL (Supabase)
 Use Supabase Dashboard → SQL Editor
 
+### Required Schema Migrations
+
+If you see errors about missing tables/columns, run these in Supabase SQL Editor:
+
+**Settings Table:**
+```sql
+CREATE TABLE IF NOT EXISTS settings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  webhook_url TEXT,
+  api_key_enabled BOOLEAN DEFAULT FALSE,
+  email_notifications BOOLEAN DEFAULT FALSE,
+  auto_retry_enabled BOOLEAN DEFAULT TRUE,
+  max_retries INTEGER DEFAULT 3
+);
+```
+
+**Instantly Integration Columns (contacts table):**
+```sql
+ALTER TABLE contacts 
+  ADD COLUMN IF NOT EXISTS instantly_lead_id VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS instantly_pushed_at TIMESTAMP,
+  ADD COLUMN IF NOT EXISTS instantly_campaign_id VARCHAR(255);
+```
+
 ---
 
 ## API Endpoints
@@ -343,12 +369,14 @@ The `/api/intake` endpoint allows external systems (webhooks, CRMs, automation t
 
 ### Authentication
 
-Two modes depending on Settings UI configuration:
+**Environment-based enforcement (no UI dependency):**
 
-| API Settings | Behavior |
-|--------------|----------|
-| **Disabled** | Endpoint is open (no auth required) |
-| **Enabled** | Requires `X-API-Key` header with `API_INTAKE_KEY` value |
+| API_INTAKE_KEY env var | Behavior |
+|------------------------|----------|
+| **Not set** | Endpoint is open (no auth required) |
+| **Set (any value)** | Requires `X-API-Key` header matching the env var |
+
+This design ensures security is enforced at the environment level, independent of database settings.
 
 ### Setup Steps
 
@@ -362,8 +390,19 @@ Two modes depending on Settings UI configuration:
    API_INTAKE_KEY=your-generated-key-here
    ```
 
-3. **Enable in Settings UI:**
-   - Go to Settings → API Settings → Enable
+3. **Test enforcement:**
+   ```bash
+   # Should return 401
+   curl -X POST https://your-app.railway.app/api/intake \
+     -H "Content-Type: application/json" \
+     -d '{"email":"test@example.com"}'
+   
+   # Should return 200
+   curl -X POST https://your-app.railway.app/api/intake \
+     -H "Content-Type: application/json" \
+     -H "X-API-Key: your-api-key" \
+     -d '{"email":"test@example.com"}'
+   ```
 
 ### Request Format
 
