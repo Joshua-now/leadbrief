@@ -24,45 +24,28 @@ const upload = multer({
 const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
 
 // API Key validation middleware for intake endpoint
-// Security: Checks settings.api_key_enabled and validates against API_INTAKE_KEY env var
-async function validateApiKey(req: Request, res: Response, next: () => void) {
-  try {
-    // Check if API key is enabled in settings
-    const settings = await storage.getSettings();
-    const apiKeyEnabled = settings?.apiKeyEnabled ?? false;
-    
-    // If API key protection is disabled in settings, allow request
-    if (!apiKeyEnabled) {
-      return next();
-    }
-    
-    // API key is enabled - require valid key
-    const apiKey = req.headers['x-api-key'] as string;
-    const configuredApiKey = process.env.API_INTAKE_KEY || process.env.API_KEY;
-    
-    // If API key protection is enabled but no key is configured, reject
-    if (!configuredApiKey) {
-      console.warn("[Intake] API key enabled in settings but API_INTAKE_KEY not configured");
-      return res.status(503).json({ 
-        error: "API intake not configured", 
-        message: "Set API_INTAKE_KEY environment variable to enable API intake" 
-      });
-    }
-    
-    if (!apiKey) {
-      return res.status(401).json({ error: "Missing X-API-Key header" });
-    }
-    
-    if (apiKey !== configuredApiKey) {
-      return res.status(401).json({ error: "Invalid API key" });
-    }
-    
-    next();
-  } catch (error) {
-    console.error("[Intake] API key validation error:", error);
-    // Always fail closed - if we can't check settings, reject the request
-    return res.status(500).json({ error: "API key validation failed" });
+// Security: If API_INTAKE_KEY env var is set, require matching X-API-Key header
+// This is enforced at the environment level - no database dependency
+function validateApiKey(req: Request, res: Response, next: () => void) {
+  const configuredApiKey = process.env.API_INTAKE_KEY || process.env.API_KEY;
+  
+  // If no API key configured in env, endpoint is open
+  if (!configuredApiKey) {
+    return next();
   }
+  
+  // API key is configured - require valid X-API-Key header
+  const apiKey = req.headers['x-api-key'] as string;
+  
+  if (!apiKey) {
+    return res.status(401).json({ error: "Missing X-API-Key header" });
+  }
+  
+  if (apiKey !== configuredApiKey) {
+    return res.status(401).json({ error: "Invalid API key" });
+  }
+  
+  next();
 }
 
 // Simple rate limiter middleware
