@@ -1,0 +1,119 @@
+I need a true end-to-end acceptance pass like a human using the app. Do NOT rely on unit tests alone. Pretend you’re a QA tester using the Railway deployment in a browser and via curl.
+Do not say “done” unless every check below passes and you paste proof outputs.
+
+A) Environment + Health (Railway)
+
+Hit /api/health and paste output
+
+Hit /api/ready and paste output
+
+Hit /api/finalcheck and paste output
+
+B) Security (Inbound Intake)
+
+POST /api/intake without X-API-Key → must return 401 (paste curl + response)
+
+POST /api/intake with correct X-API-Key → must return 200 success (paste curl + response)
+
+C) Data Model Completeness (must exist + visible in UI)
+
+The app must support and display these first-class fields for contacts/leads:
+
+business/company name
+
+website URL + derived domain
+
+city + state (and address optional)
+
+category/industry optional
+
+email + phone
+
+Confirm these fields exist in DB schema (paste migration/SQL or schema snippet).
+
+Confirm the Contacts list UI shows business name, website, city/state (not “Unknown”) for test records.
+
+D) Import / Mapping UI (user workflow)
+
+In the Import UI, confirm mapping targets exist for:
+
+Business Name
+
+Website URL
+
+City
+
+State
+(Paste screenshot or describe exact UI labels + where they appear.)
+
+E) End-to-End “Pretend User” Walkthrough (UI)
+
+Perform this walkthrough on the Railway deployment as if you’re a user:
+9) Add/import a small CSV with 3 test leads:
+
+Lead 1: phone + city/state + website + business name (no email)
+
+Lead 2: email + business name + website (no phone)
+
+Lead 3: phone only (minimal)
+
+Verify they appear in Contacts and each shows correct fields.
+
+Verify Data Quality differs per lead (not all 20%) and includes Website as a dimension.
+
+F) De-dup / Merge / Upsert (critical)
+
+Import the SAME CSV again. The system must MERGE not duplicate:
+
+Contact count must NOT increase for matching leads.
+
+Existing contact should be updated with missing fields if provided.
+
+Paste proof:
+
+before/after counts OR query output OR screenshot showing no duplicates
+
+show one example contact that got enriched (fields added) rather than duplicated
+
+Matching rules required:
+
+email (case-insensitive) highest priority
+
+else domain/website
+
+else phone normalized
+
+never overwrite good data with blanks
+
+G) Contacts List Scrolling (UI usability)
+
+Populate at least 60 contacts (can be generated test records) and confirm:
+
+you can scroll to the last row at 100% browser zoom
+
+header remains usable
+Paste proof (short screen recording description or screenshot notes) and confirm overflow-hidden is not blocking scrolling.
+
+H) Logging + Diagnostics
+
+Trigger one expected failure (e.g., save settings POST if still exists or bad intake key) and confirm logs show helpful error context (paste log snippet).
+
+I) Final Report (required)
+
+Provide a checklist with PASS/FAIL for each item above, plus:
+
+files changed
+
+migrations/SQL applied
+
+exact commands/curls run
+
+anything still not covered
+
+Do not mark complete unless ALL items pass with pasted proof from the Railway deployment.
+
+Optional “make it even harder”
+
+Add this one line at the end if you want maximum strictness:
+
+If any item fails, stop and fix it immediately, then rerun the entire checklist and paste fresh proofs.
