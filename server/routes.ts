@@ -21,20 +21,48 @@ const upload = multer({
 const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
 
 // API Key validation middleware for intake endpoint
-function validateApiKey(req: Request, res: Response, next: () => void) {
-  const apiKey = req.headers['x-api-key'] as string;
-  const configuredApiKey = process.env.API_KEY;
-  
-  // If no API_KEY is configured, allow all requests (for development/backwards compatibility)
-  if (!configuredApiKey) {
-    return next();
+// Security: Checks settings.api_key_enabled and validates against API_INTAKE_KEY env var
+async function validateApiKey(req: Request, res: Response, next: () => void) {
+  try {
+    // Check if API key is enabled in settings
+    const settings = await storage.getSettings();
+    const apiKeyEnabled = settings?.apiKeyEnabled ?? false;
+    
+    // If API key protection is disabled in settings, allow request
+    if (!apiKeyEnabled) {
+      return next();
+    }
+    
+    // API key is enabled - require valid key
+    const apiKey = req.headers['x-api-key'] as string;
+    const configuredApiKey = process.env.API_INTAKE_KEY || process.env.API_KEY;
+    
+    // If API key protection is enabled but no key is configured, reject
+    if (!configuredApiKey) {
+      console.warn("[Intake] API key enabled in settings but API_INTAKE_KEY not configured");
+      return res.status(503).json({ 
+        error: "API intake not configured", 
+        message: "Set API_INTAKE_KEY environment variable to enable API intake" 
+      });
+    }
+    
+    if (!apiKey) {
+      return res.status(401).json({ error: "Missing X-API-Key header" });
+    }
+    
+    if (apiKey !== configuredApiKey) {
+      return res.status(401).json({ error: "Invalid API key" });
+    }
+    
+    next();
+  } catch (error) {
+    console.error("[Intake] API key validation error:", error);
+    // On error, fail open in development, closed in production
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(500).json({ error: "API key validation failed" });
+    }
+    next();
   }
-  
-  if (!apiKey || apiKey !== configuredApiKey) {
-    return res.status(401).json({ error: "Invalid or missing API key" });
-  }
-  
-  next();
 }
 
 // Simple rate limiter middleware

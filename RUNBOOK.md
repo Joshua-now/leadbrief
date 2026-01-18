@@ -135,8 +135,8 @@ These are automatically set by Replit:
 | `SUPABASE_ANON_KEY` | Yes | Railway | Supabase anon/public key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Recommended | Railway | Supabase service role key |
 | `APP_URL` | Recommended | Railway | App URL for auth redirects |
-| `API_KEY` | Optional | Both | API key for /api/intake endpoint |
-| `DEBUG_KEY` | Optional | Both | Key for /debug/lastlog endpoint |
+| `API_INTAKE_KEY` | Optional | Both | API key for /api/intake endpoint (when API Settings enabled) |
+| `DEBUG_KEY` | Optional | Both | Key for /api/debug/lastlog endpoint |
 | `REPL_ID` | Auto | Replit | Auto-set by Replit |
 | `NODE_ENV` | Optional | Both | `production` or `development` |
 | `PORT` | Optional | Both | Server port (default: 5000) |
@@ -264,13 +264,167 @@ Use Supabase Dashboard → SQL Editor
 | `/api/auth/config` | GET | No | Auth provider info |
 | `/api/auth/user` | GET | Yes | Current user |
 | `/api/import/bulk` | POST | Yes | Bulk import |
-| `/api/intake` | POST | API Key | Single lead intake |
+| `/api/intake` | POST | API Key* | Single lead intake |
 | `/api/jobs` | GET | Yes | List jobs |
 | `/api/jobs/:id` | GET | Yes | Job details |
 | `/api/jobs/:id/retry` | POST | Yes | Retry failed job |
 | `/api/contacts` | GET | Yes | List contacts |
 | `/api/contacts/:id` | GET | Yes | Contact details |
 | `/api/settings` | GET/POST | Yes | User settings |
+
+*API Key required only when "API Settings" is enabled in Settings UI.
+
+---
+
+## API Intake Endpoint
+
+The `/api/intake` endpoint allows external systems (webhooks, CRMs, automation tools) to push leads into LeadBrief.
+
+### Authentication
+
+Two modes depending on Settings UI configuration:
+
+| API Settings | Behavior |
+|--------------|----------|
+| **Disabled** | Endpoint is open (no auth required) |
+| **Enabled** | Requires `X-API-Key` header with `API_INTAKE_KEY` value |
+
+### Setup Steps
+
+1. **Generate API Key:**
+   ```bash
+   openssl rand -hex 32
+   ```
+
+2. **Set Environment Variable (Railway):**
+   ```
+   API_INTAKE_KEY=your-generated-key-here
+   ```
+
+3. **Enable in Settings UI:**
+   - Go to Settings → API Settings → Enable
+
+### Request Format
+
+```bash
+POST /api/intake
+Content-Type: application/json
+X-API-Key: your-api-key  # Only if API Settings enabled
+
+{
+  "email": "john@example.com",
+  "firstName": "John",
+  "lastName": "Doe",
+  "company": "Acme Corp",
+  "phone": "+1-555-123-4567",
+  "title": "CEO",
+  "websiteUrl": "https://acme.com",
+  "city": "San Francisco",
+  "linkedinUrl": "https://linkedin.com/in/johndoe"
+}
+```
+
+### Required Fields
+
+At least ONE of these is required:
+- `email` - Contact email address
+- `phone` - Contact phone number
+- `linkedinUrl` - LinkedIn profile URL
+
+### Optional Fields
+
+| Field | Type | Max Length | Description |
+|-------|------|------------|-------------|
+| `firstName` | string | 200 | First name |
+| `lastName` | string | 200 | Last name |
+| `company` | string | 500 | Company name |
+| `companyName` | string | 500 | Alias for company |
+| `title` | string | 200 | Job title |
+| `phone` | string | 50 | Phone number |
+| `websiteUrl` | string | 500 | Company website |
+| `city` | string | 200 | City |
+| `linkedinUrl` | string | 500 | LinkedIn URL |
+| `leadName` | string | - | Full name (splits to first/last) |
+| `ghlContactId` | string | - | GoHighLevel contact ID |
+
+### Response
+
+**Success (200):**
+```json
+{
+  "success": true,
+  "contactId": "uuid-here",
+  "jobId": "uuid-here",
+  "status": "complete"
+}
+```
+
+**Validation Error (400):**
+```json
+{
+  "error": "Email, phone, or LinkedIn URL required"
+}
+```
+
+**Unauthorized (401):**
+```json
+{
+  "error": "Missing X-API-Key header"
+}
+```
+
+**Not Configured (503):**
+```json
+{
+  "error": "API intake not configured",
+  "message": "Set API_INTAKE_KEY environment variable to enable API intake"
+}
+```
+
+### Curl Examples
+
+**With API Key (API Settings enabled):**
+```bash
+curl -X POST https://your-app.railway.app/api/intake \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-intake-key" \
+  -d '{
+    "email": "john@example.com",
+    "firstName": "John",
+    "lastName": "Doe",
+    "company": "Acme Corp"
+  }'
+```
+
+**Without API Key (API Settings disabled):**
+```bash
+curl -X POST https://your-app.railway.app/api/intake \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "jane@example.com",
+    "firstName": "Jane",
+    "company": "Example Inc"
+  }'
+```
+
+**GoHighLevel Webhook Format:**
+```bash
+curl -X POST https://your-app.railway.app/api/intake \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-intake-key" \
+  -d '{
+    "ghlContactId": "abc123",
+    "leadName": "John Doe",
+    "email": "john@example.com",
+    "companyName": "Acme Corp",
+    "websiteUrl": "https://acme.com"
+  }'
+```
+
+### Rate Limits
+
+- 30 requests per minute per IP
+- Returns 429 if exceeded with `retryAfter` in seconds
 
 ---
 

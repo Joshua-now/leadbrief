@@ -16,6 +16,7 @@ const SECRETS = new Set([
   'SUPABASE_ANON_KEY',
   'SUPABASE_SERVICE_ROLE_KEY',
   'API_KEY',
+  'API_INTAKE_KEY',
   'DEBUG_KEY',
 ]);
 
@@ -32,6 +33,7 @@ const OPTIONAL_VARS = [
   'DATABASE_URL',
   'APP_URL',
   'API_KEY',
+  'API_INTAKE_KEY',
   'DEBUG_KEY',
 ] as const;
 
