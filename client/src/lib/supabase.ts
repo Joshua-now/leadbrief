@@ -1,45 +1,93 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 let supabaseClient: SupabaseClient | null = null;
+let supabaseConfig: { url: string; anonKey: string } | null = null;
+let configFetched = false;
+let configPromise: Promise<void> | null = null;
+
+// Fetch Supabase config from server (for runtime configuration)
+async function fetchSupabaseConfig(): Promise<void> {
+  if (configFetched) return;
+  if (configPromise) return configPromise;
+  
+  configPromise = (async () => {
+    try {
+      const response = await fetch('/api/auth/config');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.supabase) {
+          supabaseConfig = {
+            url: data.supabase.url,
+            anonKey: data.supabase.anonKey,
+          };
+          console.log('[Supabase] Config fetched from server');
+        }
+      }
+    } catch (e) {
+      console.error('[Supabase] Failed to fetch config:', e);
+    }
+    configFetched = true;
+  })();
+  
+  return configPromise;
+}
+
+// Check build-time env vars first, then runtime config
+function getConfig(): { url: string; anonKey: string } | null {
+  // Try build-time env vars first
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    return {
+      url: import.meta.env.VITE_SUPABASE_URL,
+      anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+    };
+  }
+  // Fall back to runtime config
+  return supabaseConfig;
+}
 
 export function isSupabaseConfigured(): boolean {
-  const configured = !!(
-    import.meta.env.VITE_SUPABASE_URL && 
-    import.meta.env.VITE_SUPABASE_ANON_KEY
-  );
-  console.log('[Supabase] isConfigured:', configured, {
-    url: !!import.meta.env.VITE_SUPABASE_URL,
-    key: !!import.meta.env.VITE_SUPABASE_ANON_KEY,
-  });
+  const config = getConfig();
+  const configured = !!(config?.url && config?.anonKey);
+  console.log('[Supabase] isConfigured:', configured);
   return configured;
 }
 
+// Async version that fetches config first
+export async function ensureSupabaseConfigured(): Promise<boolean> {
+  await fetchSupabaseConfig();
+  return isSupabaseConfigured();
+}
+
 export function getSupabaseClient(): SupabaseClient | null {
-  if (!isSupabaseConfigured()) {
+  const config = getConfig();
+  if (!config) {
     return null;
   }
   
   if (!supabaseClient) {
     console.log('[Supabase] Creating client with persistence enabled');
-    supabaseClient = createClient(
-      import.meta.env.VITE_SUPABASE_URL,
-      import.meta.env.VITE_SUPABASE_ANON_KEY,
-      {
-        auth: {
-          persistSession: true,
-          autoRefreshToken: true,
-          detectSessionInUrl: false,
-          storage: localStorage,
-          storageKey: 'leadbrief-auth',
-        },
-      }
-    );
+    supabaseClient = createClient(config.url, config.anonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: false,
+        storage: localStorage,
+        storageKey: 'leadbrief-auth',
+      },
+    });
   }
   
   return supabaseClient;
 }
 
+// Async version that ensures config is loaded
+export async function getSupabaseClientAsync(): Promise<SupabaseClient | null> {
+  await fetchSupabaseConfig();
+  return getSupabaseClient();
+}
+
 export async function signInWithEmail(email: string, password: string) {
+  await fetchSupabaseConfig();
   const client = getSupabaseClient();
   if (!client) {
     throw new Error('Supabase is not configured');
@@ -59,13 +107,11 @@ export async function signInWithEmail(email: string, password: string) {
   
   console.log('[Supabase] Sign in successful, session:', !!data.session);
   
-  // No server session sync needed - stateless JWT auth
-  // The access_token will be sent with each API request via Authorization header
-  
   return data;
 }
 
 export async function signUpWithEmail(email: string, password: string) {
+  await fetchSupabaseConfig();
   const client = getSupabaseClient();
   if (!client) {
     throw new Error('Supabase is not configured');
@@ -85,17 +131,14 @@ export async function signUpWithEmail(email: string, password: string) {
 
 export async function signOut() {
   const client = getSupabaseClient();
-  if (!client) {
-    // Just call the backend logout
-    window.location.href = '/api/logout';
-    return;
+  if (client) {
+    await client.auth.signOut();
   }
-  
-  await client.auth.signOut();
   window.location.href = '/api/logout';
 }
 
 export async function getSession() {
+  await fetchSupabaseConfig();
   const client = getSupabaseClient();
   if (!client) {
     return null;
@@ -105,13 +148,13 @@ export async function getSession() {
   return session;
 }
 
-// Get access token for API requests
 export async function getAccessToken(): Promise<string | null> {
   const session = await getSession();
   return session?.access_token || null;
 }
 
 export async function getUser() {
+  await fetchSupabaseConfig();
   const client = getSupabaseClient();
   if (!client) {
     return null;

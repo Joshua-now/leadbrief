@@ -1,5 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
-import { getAccessToken, isSupabaseConfigured } from "./supabase";
+import { getAccessToken, ensureSupabaseConfigured } from "./supabase";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -10,8 +10,9 @@ async function throwIfResNotOk(res: Response) {
 
 // Get authorization headers for API requests
 async function getAuthHeaders(): Promise<HeadersInit> {
-  // Only add Bearer token for Supabase auth
-  if (isSupabaseConfigured()) {
+  // Ensure Supabase config is loaded, then add Bearer token if configured
+  const isConfigured = await ensureSupabaseConfigured();
+  if (isConfigured) {
     const token = await getAccessToken();
     if (token) {
       return { Authorization: `Bearer ${token}` };
