@@ -905,9 +905,15 @@ export async function registerRoutes(
   });
 
   app.post("/api/settings", isAuthenticated, async (req: Request, res: Response) => {
-    console.log("[Settings] POST /api/settings received, body:", JSON.stringify(req.body));
+    console.log("[Settings] POST /api/settings received");
+    console.log("[Settings] Request body:", JSON.stringify(req.body, null, 2));
+    console.log("[Settings] User:", (req as any).user?.id || "unknown");
+    console.log("[Settings] Session ID:", req.sessionID || "none");
+    
     try {
       const { webhookUrl, apiKeyEnabled, emailNotifications, autoRetryEnabled, maxRetries } = req.body;
+      console.log("[Settings] Parsed values:", { webhookUrl, apiKeyEnabled, emailNotifications, autoRetryEnabled, maxRetries });
+      
       const appSettings = await storage.upsertSettings({
         webhookUrl: webhookUrl || null,
         apiKeyEnabled: !!apiKeyEnabled,
@@ -915,10 +921,16 @@ export async function registerRoutes(
         autoRetryEnabled: autoRetryEnabled !== false,
         maxRetries: Math.min(Math.max(parseInt(maxRetries) || 3, 1), 10),
       });
+      
+      console.log("[Settings] Save successful, ID:", appSettings.id);
       res.json(appSettings);
     } catch (error: any) {
       const errorMessage = error?.message || String(error);
-      console.error("Error saving settings:", errorMessage);
+      const errorStack = error?.stack || "no stack";
+      console.error("[Settings] ERROR saving settings:");
+      console.error("[Settings] Message:", errorMessage);
+      console.error("[Settings] Stack:", errorStack);
+      console.error("[Settings] Full error:", JSON.stringify(error, Object.getOwnPropertyNames(error)));
       
       // Check if it's a missing table error
       if (errorMessage.includes('does not exist') || errorMessage.includes('relation')) {
