@@ -40,7 +40,7 @@ const menuItems = [
 
 export function AppSidebar() {
   const [location] = useLocation();
-  const { user } = useAuth();
+  const { user, logout, isLoggingOut } = useAuth();
 
   const initials = `${user?.firstName?.[0] || ""}${user?.lastName?.[0] || ""}`.toUpperCase() || "U";
   const displayName = [user?.firstName, user?.lastName].filter(Boolean).join(" ") || user?.email || "User";
@@ -105,11 +105,13 @@ export function AppSidebar() {
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild>
-              <a href="/api/logout" data-testid="button-logout">
-                <LogOut className="h-4 w-4" />
-                <span>Logout</span>
-              </a>
+            <SidebarMenuButton 
+              onClick={() => logout()} 
+              disabled={isLoggingOut}
+              data-testid="button-logout"
+            >
+              <LogOut className="h-4 w-4" />
+              <span>{isLoggingOut ? "Logging out..." : "Logout"}</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
