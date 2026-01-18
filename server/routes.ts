@@ -13,6 +13,7 @@ import { companies, contacts, bulkJobs, bulkJobItems } from "@shared/schema";
 import { getSystemHealth, withTimeout, categorizeError } from "./lib/guardrails";
 import { getEnvPresenceFlags, getAppVersion, checkDependencies } from "./lib/env";
 import { getLastLogs, crashLog } from "./lib/crash-logger";
+import { pushToInstantly, pushBatchToInstantly, isInstantlyConfigured, getInstantlyConfig } from "./lib/instantly";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -554,82 +555,124 @@ export async function registerRoutes(
     }
   });
 
-  // Single contact intake with rate limiting and API key validation
+  // Contact intake endpoint - accepts single lead or array of leads
+  // Auth: X-API-Key header required when apiKeyEnabled in settings
+  // Returns 200 JSON with contactId(s) - never redirects
   app.post("/api/intake", validateApiKey, rateLimit(30, 60000), async (req: Request, res: Response) => {
     try {
-      const { email, phone, firstName, lastName, company, title, linkedinUrl, ghlContactId, leadName, companyName, websiteUrl, city } = req.body;
-
-      // Handle GHL webhook format
-      const contactEmail = email?.toLowerCase()?.trim();
-      const contactPhone = phone?.trim();
-      const contactFirstName = (firstName || (leadName?.split(" ")[0]))?.trim();
-      const contactLastName = (lastName || (leadName?.split(" ").slice(1).join(" ")))?.trim();
-      const contactCompany = (company || companyName)?.trim();
-      const contactCity = city?.trim();
-
-      if (!contactEmail && !contactPhone && !linkedinUrl) {
-        return res.status(400).json({ error: "Email, phone, or LinkedIn URL required" });
-      }
-
-      // Validate email format if provided
-      if (contactEmail && !/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(contactEmail)) {
-        return res.status(400).json({ error: "Invalid email format" });
-      }
-
-      // Create or update company if provided
-      let companyId: string | null = null;
-      if (contactCompany) {
-        const companyRecord = await storage.upsertCompany({
-          name: contactCompany.slice(0, 500),
-          domain: websiteUrl?.slice(0, 500) || null,
-        });
-        companyId = companyRecord.id;
-      }
-
-      // Create or update contact
-      const contact = await storage.upsertContact({
-        email: contactEmail || null,
-        phone: contactPhone || null,
-        firstName: contactFirstName?.slice(0, 200) || null,
-        lastName: contactLastName?.slice(0, 200) || null,
-        title: title?.slice(0, 200) || null,
-        city: contactCity?.slice(0, 200) ?? null,
-        companyId,
-        linkedinUrl: linkedinUrl?.slice(0, 500) || null,
-      });
-
-      // Create a single-record job for tracking
-      const jobName = ghlContactId 
-        ? `GHL: ${leadName || contactEmail}` 
-        : `Single: ${contactFirstName || contactEmail}`;
+      // Support both single object and array of leads
+      const leads = Array.isArray(req.body) ? req.body : [req.body];
       
+      if (leads.length === 0) {
+        return res.status(400).json({ error: "No leads provided" });
+      }
+      if (leads.length > 100) {
+        return res.status(400).json({ error: "Maximum 100 leads per request" });
+      }
+
+      const results: Array<{ success: boolean; contactId?: string; email?: string; error?: string }> = [];
+
+      for (const lead of leads) {
+        try {
+          const { email, phone, firstName, lastName, company, title, linkedinUrl, ghlContactId, leadName, companyName, websiteUrl, city } = lead;
+
+          // Handle GHL webhook format
+          const contactEmail = email?.toLowerCase()?.trim();
+          const contactPhone = phone?.trim();
+          const contactFirstName = (firstName || (leadName?.split(" ")[0]))?.trim();
+          const contactLastName = (lastName || (leadName?.split(" ").slice(1).join(" ")))?.trim();
+          const contactCompany = (company || companyName)?.trim();
+          const contactCity = city?.trim();
+
+          if (!contactEmail && !contactPhone && !linkedinUrl) {
+            results.push({ success: false, email: contactEmail, error: "Email, phone, or LinkedIn URL required" });
+            continue;
+          }
+
+          // Validate email format if provided
+          if (contactEmail && !/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(contactEmail)) {
+            results.push({ success: false, email: contactEmail, error: "Invalid email format" });
+            continue;
+          }
+
+          // Create or update company if provided
+          let companyId: string | null = null;
+          if (contactCompany) {
+            const companyRecord = await storage.upsertCompany({
+              name: contactCompany.slice(0, 500),
+              domain: websiteUrl?.slice(0, 500) || null,
+            });
+            companyId = companyRecord.id;
+          }
+
+          // Create or update contact
+          const contact = await storage.upsertContact({
+            email: contactEmail || null,
+            phone: contactPhone || null,
+            firstName: contactFirstName?.slice(0, 200) || null,
+            lastName: contactLastName?.slice(0, 200) || null,
+            title: title?.slice(0, 200) || null,
+            city: contactCity?.slice(0, 200) ?? null,
+            companyId,
+            linkedinUrl: linkedinUrl?.slice(0, 500) || null,
+          });
+
+          results.push({ success: true, contactId: contact.id, email: contactEmail });
+        } catch (e: any) {
+          results.push({ success: false, error: e.message });
+        }
+      }
+
+      // Create a tracking job for the batch
+      const successCount = results.filter(r => r.success).length;
       const job = await storage.createBulkJob({
-        name: jobName.slice(0, 200),
-        sourceFormat: ghlContactId ? "ghl_webhook" : "api_single",
-        totalRecords: 1,
+        name: `API Intake: ${successCount}/${leads.length} leads`,
+        sourceFormat: "api_intake",
+        totalRecords: leads.length,
         status: "complete",
-        successful: 1,
+        successful: successCount,
+        failed: leads.length - successCount,
         completedAt: new Date(),
       });
 
-      await storage.createBulkJobItems([{
-        bulkJobId: job.id,
-        rowNumber: 1,
-        status: "complete",
-        parsedData: JSON.parse(JSON.stringify({ 
-          email: contactEmail, 
-          firstName: contactFirstName, 
-          lastName: contactLastName 
-        })),
-        contactId: contact.id,
-        companyId,
-      }]);
+      // Create job items for successful contacts
+      const jobItems = results
+        .filter(r => r.success && r.contactId)
+        .map((r, idx) => ({
+          bulkJobId: job.id,
+          rowNumber: idx + 1,
+          status: "complete" as const,
+          parsedData: JSON.parse(JSON.stringify({ email: r.email })),
+          contactId: r.contactId!,
+        }));
 
+      if (jobItems.length > 0) {
+        await storage.createBulkJobItems(jobItems);
+      }
+
+      // Return single result for single input, array for array input
+      if (!Array.isArray(req.body)) {
+        const result = results[0];
+        if (result.success) {
+          return res.json({
+            success: true,
+            contactId: result.contactId,
+            jobId: job.id,
+            status: "complete",
+          });
+        } else {
+          return res.status(400).json({ success: false, error: result.error });
+        }
+      }
+
+      // Return array results
       res.json({
-        success: true,
-        contactId: contact.id,
+        success: successCount > 0,
         jobId: job.id,
-        status: "complete",
+        total: leads.length,
+        successful: successCount,
+        failed: leads.length - successCount,
+        results,
       });
     } catch (error) {
       console.error("Intake error:", error);
@@ -718,6 +761,111 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error saving settings:", error);
       res.status(500).json({ error: "Failed to save settings" });
+    }
+  });
+
+  // Integration status endpoint - shows configured integrations
+  app.get("/api/integrations/status", isAuthenticated, async (_req: Request, res: Response) => {
+    const apiKeyConfigured = !!(process.env.API_INTAKE_KEY || process.env.API_KEY);
+    const instantlyConfig = getInstantlyConfig();
+    
+    res.json({
+      inbound: {
+        endpoint: "/api/intake",
+        method: "POST",
+        authHeader: "X-API-Key",
+        apiKeyConfigured,
+        status: apiKeyConfigured ? "ready" : "not_configured",
+      },
+      instantly: {
+        configured: instantlyConfig.configured,
+        campaignId: instantlyConfig.campaignId ? `...${instantlyConfig.campaignId.slice(-4)}` : null,
+        status: instantlyConfig.configured ? "ready" : "not_configured",
+      },
+    });
+  });
+
+  // Instantly push endpoint - push contact(s) to Instantly campaign
+  app.post("/api/instantly/push", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      if (!isInstantlyConfigured()) {
+        return res.status(503).json({ 
+          error: "Instantly not configured",
+          message: "Set INSTANTLY_API_KEY and INSTANTLY_CAMPAIGN_ID environment variables" 
+        });
+      }
+
+      const { contactId, contactIds, campaignId } = req.body;
+      
+      // Single contact
+      if (contactId) {
+        const result = await pushToInstantly(contactId, campaignId);
+        return res.json(result);
+      }
+      
+      // Batch contacts
+      if (contactIds && Array.isArray(contactIds)) {
+        if (contactIds.length > 100) {
+          return res.status(400).json({ error: "Maximum 100 contacts per push" });
+        }
+        const results = await pushBatchToInstantly(contactIds, campaignId);
+        const successCount = results.filter(r => r.success).length;
+        return res.json({
+          success: successCount > 0,
+          total: contactIds.length,
+          successful: successCount,
+          failed: contactIds.length - successCount,
+          results,
+        });
+      }
+      
+      return res.status(400).json({ error: "Provide contactId or contactIds array" });
+    } catch (error: any) {
+      console.error("Instantly push error:", error);
+      res.status(500).json({ error: error.message || "Push failed" });
+    }
+  });
+
+  // Instantly test endpoint - verifies configuration works
+  app.post("/api/instantly/test", isAuthenticated, async (_req: Request, res: Response) => {
+    const config = getInstantlyConfig();
+    
+    if (!config.configured) {
+      return res.json({
+        success: false,
+        configured: false,
+        error: "Set INSTANTLY_API_KEY and INSTANTLY_CAMPAIGN_ID in environment variables",
+      });
+    }
+    
+    // Test API connection
+    try {
+      const response = await fetch("https://api.instantly.ai/api/v1/campaign/list", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: config.apiKey }),
+      });
+      
+      if (response.ok) {
+        return res.json({
+          success: true,
+          configured: true,
+          campaignId: config.campaignId,
+          message: "Instantly API connection successful",
+        });
+      } else {
+        return res.json({
+          success: false,
+          configured: true,
+          error: `API returned ${response.status}`,
+        });
+      }
+    } catch (e: any) {
+      return res.json({
+        success: false,
+        configured: true,
+        error: e.message,
+      });
     }
   });
 

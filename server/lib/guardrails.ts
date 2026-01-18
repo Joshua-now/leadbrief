@@ -126,31 +126,48 @@ export async function checkDatabaseHealth(): Promise<{
 }
 
 // Memory usage check
+// Note: Memory percentage is INFORMATIONAL ONLY - does NOT affect liveness
+// Small containers (30MB) will naturally run at 90%+ which is completely normal
+// Only RSS > 500MB or heap at 99%+ indicates a real problem
 export function getMemoryUsage(): {
   used: number;
   total: number;
+  rss: number;
   percentUsed: number;
   isHealthy: boolean;
+  warning: boolean;
 } {
-  const used = process.memoryUsage();
-  const heapUsed = used.heapUsed;
-  const heapTotal = used.heapTotal;
+  const mem = process.memoryUsage();
+  const heapUsed = mem.heapUsed;
+  const heapTotal = mem.heapTotal;
+  const rss = mem.rss;
   const percentUsed = Math.round((heapUsed / heapTotal) * 100);
+  
+  // Memory is only critically unhealthy if:
+  // - Heap is at 99%+ (imminent OOM)
+  // - RSS exceeds 500MB (likely memory leak in production)
+  const rssMB = rss / 1024 / 1024;
+  const isHealthy = percentUsed < 99 && rssMB < 500;
+  const warning = percentUsed >= 95 || rssMB >= 400;
   
   return {
     used: Math.round(heapUsed / 1024 / 1024), // MB
     total: Math.round(heapTotal / 1024 / 1024), // MB
+    rss: Math.round(rssMB), // MB
     percentUsed,
-    isHealthy: percentUsed < 90,
+    isHealthy,
+    warning,
   };
 }
 
 // Comprehensive system health check
+// IMPORTANT: Memory does NOT affect health status for liveness probes
+// Only database connectivity determines if system is "unhealthy"
 export async function getSystemHealth(): Promise<{
   status: "healthy" | "degraded" | "unhealthy";
   checks: {
     database: { healthy: boolean; latencyMs: number; error?: string };
-    memory: { used: number; total: number; percentUsed: number; isHealthy: boolean };
+    memory: { used: number; total: number; rss: number; percentUsed: number; isHealthy: boolean; warning: boolean };
     processor: { healthy: boolean; pendingJobs: number; processingJobs: number; staleJobs: number };
     circuitBreakers: { name: string; isOpen: boolean; failures: number }[];
   };
@@ -171,11 +188,15 @@ export async function getSystemHealth(): Promise<{
     })
   );
   
-  const allHealthy = dbHealth.healthy && memory.isHealthy && processorHealth.healthy;
-  const anyUnhealthy = !dbHealth.healthy || !memory.isHealthy;
+  // Health status is determined by DATABASE and PROCESSOR only
+  // Memory is informational - small containers run at 90%+ normally
+  const coreHealthy = dbHealth.healthy && processorHealth.healthy;
+  
+  // Degraded only if memory is at critical levels (99%+) but DB is fine
+  const memoryDegraded = !memory.isHealthy && coreHealthy;
   
   return {
-    status: anyUnhealthy ? "unhealthy" : allHealthy ? "healthy" : "degraded",
+    status: !coreHealthy ? "unhealthy" : memoryDegraded ? "degraded" : "healthy",
     checks: {
       database: dbHealth,
       memory,
@@ -218,11 +239,19 @@ export function startHealthMonitoring(intervalMs = 60000): void {
     try {
       const health = await getSystemHealth();
       
+      // Only log unhealthy for actual critical issues (DB down)
       if (health.status === "unhealthy") {
-        console.error("[HealthMonitor] System unhealthy:", JSON.stringify(health.checks));
+        console.error("[HealthMonitor] System unhealthy:", JSON.stringify({
+          database: health.checks.database,
+          processor: health.checks.processor,
+        }));
       } else if (health.status === "degraded") {
-        console.warn("[HealthMonitor] System degraded:", JSON.stringify(health.checks));
+        // Degraded is just a warning (e.g., high memory but still functional)
+        console.warn("[HealthMonitor] System degraded:", JSON.stringify({
+          memory: health.checks.memory,
+        }));
       }
+      // Don't spam logs when healthy - only log if there are issues
       
       // Self-healing: Trigger stale job recovery if needed (serialized)
       if (health.checks.processor.staleJobs > 0) {

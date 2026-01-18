@@ -1,0 +1,93 @@
+We’re very close. The app is loading and /api/ready is healthy, but it shows API_KEY:false until I set it. I need you to finish the last integration layer so I can start emailing ASAP.
+
+1) Inbound Intake (External → LeadBrief)
+
+Confirm the single canonical intake endpoint path (example: POST /api/intake).
+
+Confirm the required auth header and how it’s validated:
+
+Either Authorization: Bearer <API_KEY> OR X-API-KEY: <API_KEY> (pick one and document it).
+
+Ensure that once I set API_KEY in Railway env vars, inbound intake requests:
+
+return 200/202 JSON (no redirects)
+
+accept single lead and array of leads
+
+run normalization + store/upsert, and enqueue processing
+
+Provide a working curl example using my Railway URL and the exact header format.
+
+2) Settings UI clarity (Tie it together)
+
+In Settings, clearly separate and label:
+
+Inbound API (External → LeadBrief): show the intake endpoint URL + required header format + status (“API_KEY configured true/false”)
+
+Outbound Webhook (LeadBrief → GoHighLevel): clearly marked as outbound only
+
+If the UI only has toggles, add minimal text explaining that API_KEY is configured via env vars and show “Configured: true/false”.
+
+3) Instantly (so I can email)
+
+Add/confirm Instantly integration configuration:
+
+env var(s) or UI fields for Instantly API key + default campaign ID (or mapping)
+
+Confirm push behavior:
+
+store instantly_lead_id
+
+set instantly_pushed_at
+
+DO NOT mark leads as “sent” at push time
+
+Provide one working “push test” path (manual button or endpoint) OR document how the pipeline triggers a push.
+
+4) Verification + Proof
+
+Confirm these endpoints and expected behavior:
+
+/api/health always returns OK (liveness)
+
+/api/ready returns 200 only when dependencies OK (readiness)
+
+/api/smoke proves end-to-end and cleans up its own test data
+
+Update RUNBOOK.md with:
+
+required env vars (including API_KEY)
+
+exact intake endpoint + headers
+
+curl examples for intake + health/ready + smoke
+
+a short “first run” checklist
+
+Paste the final verify.sh output after changes.
+
+5) Safe Code Cleanup (final polish)
+
+After everything above works, do a safe cleanup pass:
+
+run formatter + linter repo-wide
+
+remove unused imports/vars, dead/commented code, debug logs (keep structured logger)
+
+ensure verify.sh and /api/smoke still pass after cleanup
+
+summarize changes
+
+Acceptance criteria (must meet all)
+
+I can set API_KEY in Railway and /api/ready shows API_KEY:true
+
+Your curl example successfully posts a test lead to intake and returns 200/202 JSON
+
+Smoke test passes in production
+
+RUNBOOK has exact steps and commands
+
+verify.sh passes after cleanup
+
+Do not ask me to guess endpoints or headers—pick the canonical ones, implement, and document.

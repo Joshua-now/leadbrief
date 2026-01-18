@@ -18,6 +18,7 @@ const SECRETS = new Set([
   'API_KEY',
   'API_INTAKE_KEY',
   'DEBUG_KEY',
+  'INSTANTLY_API_KEY',
 ]);
 
 // Required for Railway/Supabase deployment
@@ -35,6 +36,8 @@ const OPTIONAL_VARS = [
   'API_KEY',
   'API_INTAKE_KEY',
   'DEBUG_KEY',
+  'INSTANTLY_API_KEY',
+  'INSTANTLY_CAMPAIGN_ID',
 ] as const;
 
 // Replit-specific (only checked when on Replit)

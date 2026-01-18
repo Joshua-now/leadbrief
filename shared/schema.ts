@@ -29,6 +29,10 @@ export const contacts = pgTable("contacts", {
   linkedinProfileId: text("linkedin_profile_id").unique(),
   dataQualityScore: numeric("data_quality_score"),
   lastEnriched: timestamp("last_enriched"),
+  // Instantly integration fields
+  instantlyLeadId: text("instantly_lead_id"),
+  instantlyPushedAt: timestamp("instantly_pushed_at"),
+  instantlyCampaignId: text("instantly_campaign_id"),
 });
 
 export const bulkJobs = pgTable("bulk_jobs", {

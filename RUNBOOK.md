@@ -1,5 +1,66 @@
 # LeadBrief Operations Runbook
 
+## Quick Start (First Run Checklist)
+
+### 1. Set Required Environment Variables
+```bash
+# Core (always required)
+DATABASE_URL=postgresql://...          # Supabase Session Pooler
+SESSION_SECRET=your-32-char-secret     # Generate: openssl rand -hex 32
+NODE_ENV=production
+
+# Auth (Railway deployment)
+SUPABASE_URL=https://xxx.supabase.co
+SUPABASE_ANON_KEY=eyJ...
+VITE_SUPABASE_URL=https://xxx.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJ...
+
+# Inbound API (optional - protects /api/intake)
+API_INTAKE_KEY=your-secret-api-key
+
+# Instantly Integration (optional)
+INSTANTLY_API_KEY=your-instantly-api-key
+INSTANTLY_CAMPAIGN_ID=your-campaign-id
+```
+
+### 2. Verify Endpoints
+```bash
+BASE_URL=https://your-app.railway.app
+
+# Health (always returns 200 if alive)
+curl $BASE_URL/api/health
+
+# Ready (200 only if DB and auth work)
+curl $BASE_URL/api/ready
+
+# Smoke test (creates, verifies, cleans up test data)
+curl -X POST $BASE_URL/api/smoke
+```
+
+### 3. Test Inbound Intake
+```bash
+# Single lead (with API key if enabled)
+curl -X POST $BASE_URL/api/intake \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_API_INTAKE_KEY" \
+  -d '{"email":"test@example.com","firstName":"Test","lastName":"User","company":"Demo Corp"}'
+
+# Expected: {"success":true,"contactId":"...","jobId":"...","status":"complete"}
+
+# Batch leads (array)
+curl -X POST $BASE_URL/api/intake \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_API_INTAKE_KEY" \
+  -d '[
+    {"email":"lead1@example.com","firstName":"Lead","lastName":"One"},
+    {"email":"lead2@example.com","firstName":"Lead","lastName":"Two"}
+  ]'
+
+# Expected: {"success":true,"jobId":"...","total":2,"successful":2,...}
+```
+
+---
+
 ## Overview
 
 LeadBrief is a bulk contact enrichment platform that processes lead lists (CSV/JSON/XLSX), scrapes websites, extracts business intelligence, generates personalized outreach, and exports clean data.
@@ -483,6 +544,55 @@ curl /api/ready
 # Returns 503 if dependencies are down
 # {"ready":true,"dependencies":{"database":"connected","auth":"supabase"}}
 ```
+
+---
+
+## Instantly Integration
+
+Push enriched leads to Instantly for email campaigns.
+
+### Configuration
+Set these environment variables:
+```bash
+INSTANTLY_API_KEY=your-instantly-api-key
+INSTANTLY_CAMPAIGN_ID=default-campaign-id
+```
+
+### Push Leads to Instantly
+```bash
+# Single contact
+curl -X POST $BASE_URL/api/instantly/push \
+  -H "Content-Type: application/json" \
+  -H "Cookie: session=..." \
+  -d '{"contactId":"uuid-of-contact"}'
+
+# Batch contacts
+curl -X POST $BASE_URL/api/instantly/push \
+  -H "Content-Type: application/json" \
+  -H "Cookie: session=..." \
+  -d '{"contactIds":["uuid1","uuid2","uuid3"]}'
+
+# Custom campaign ID
+curl -X POST $BASE_URL/api/instantly/push \
+  -H "Content-Type: application/json" \
+  -H "Cookie: session=..." \
+  -d '{"contactId":"uuid","campaignId":"custom-campaign"}'
+```
+
+### Test Instantly Connection
+```bash
+curl -X POST $BASE_URL/api/instantly/test \
+  -H "Cookie: session=..."
+# Returns: {"success":true,"configured":true,"campaignId":"..."}
+```
+
+### Lead Tracking
+When pushed to Instantly, contacts are updated with:
+- `instantly_lead_id` - ID from Instantly
+- `instantly_pushed_at` - Timestamp of push
+- `instantly_campaign_id` - Campaign the lead was added to
+
+**Important**: Leads are NOT marked as "sent" at push time. Instantly handles email delivery status.
 
 ---
 

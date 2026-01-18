@@ -1,12 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Settings, Key, Bell, Shield, Save, RefreshCw, AlertCircle, Check } from "lucide-react";
+import { Settings, Key, Bell, Shield, Save, RefreshCw, AlertCircle, Check, Zap, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
@@ -19,6 +20,21 @@ interface AppSettings {
   maxRetries: number;
 }
 
+interface IntegrationStatus {
+  inbound: {
+    endpoint: string;
+    method: string;
+    authHeader: string;
+    apiKeyConfigured: boolean;
+    status: string;
+  };
+  instantly: {
+    configured: boolean;
+    campaignId: string | null;
+    status: string;
+  };
+}
+
 export default function SettingsPage() {
   const { toast } = useToast();
   const [webhookUrl, setWebhookUrl] = useState("");
@@ -29,6 +45,10 @@ export default function SettingsPage() {
 
   const { data: settings, isLoading, error } = useQuery<AppSettings>({
     queryKey: ["/api/settings"],
+  });
+
+  const { data: integrations } = useQuery<IntegrationStatus>({
+    queryKey: ["/api/integrations/status"],
   });
 
   const saveMutation = useMutation({
@@ -68,8 +88,7 @@ export default function SettingsPage() {
     });
   };
 
-  // Update local state when settings load
-  useState(() => {
+  useEffect(() => {
     if (settings) {
       setWebhookUrl(settings.webhookUrl || "");
       setApiKeyEnabled(settings.apiKeyEnabled);
@@ -77,7 +96,7 @@ export default function SettingsPage() {
       setAutoRetryEnabled(settings.autoRetryEnabled);
       setMaxRetries(settings.maxRetries);
     }
-  });
+  }, [settings]);
 
   if (isLoading) {
     return (
@@ -126,7 +145,7 @@ export default function SettingsPage() {
   return (
     <div className="flex-1 overflow-auto p-6">
       <div className="mx-auto max-w-2xl space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight" data-testid="text-settings-title">Settings</h1>
             <p className="text-muted-foreground">Manage your application settings</p>
@@ -152,11 +171,11 @@ export default function SettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="space-y-0.5">
                 <Label>Require API Key for Inbound</Label>
                 <p className="text-xs text-muted-foreground">
-                  When enabled, inbound requests must include X-API-Key header matching API_INTAKE_KEY env var
+                  When enabled, inbound requests must include X-API-Key header
                 </p>
               </div>
               <Switch
@@ -165,15 +184,66 @@ export default function SettingsPage() {
                 data-testid="switch-api-key"
               />
             </div>
-            <div className="rounded-md bg-muted p-3 text-xs space-y-1">
-              <p className="font-medium">Inbound Intake Endpoint:</p>
-              <code className="text-primary">POST /api/intake</code>
-              <p className="text-muted-foreground mt-1">
-                {apiKeyEnabled 
-                  ? "Header required: X-API-Key: [your API_INTAKE_KEY]" 
-                  : "Currently open (no auth required)"}
+            <div className="rounded-md bg-muted p-3 text-xs space-y-2">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <p className="font-medium">Inbound Intake Endpoint:</p>
+                <Badge variant={integrations?.inbound.apiKeyConfigured ? "default" : "secondary"} data-testid="badge-api-key-status">
+                  API_INTAKE_KEY: {integrations?.inbound.apiKeyConfigured ? "Configured" : "Not Set"}
+                </Badge>
+              </div>
+              <code className="text-primary block">POST /api/intake</code>
+              <p className="text-muted-foreground">
+                Header: <code>X-API-Key: [your API_INTAKE_KEY]</code>
               </p>
+              {apiKeyEnabled && !integrations?.inbound.apiKeyConfigured && (
+                <p className="text-orange-600 dark:text-orange-400">
+                  Set API_INTAKE_KEY in environment variables to protect this endpoint
+                </p>
+              )}
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Mail className="h-5 w-5" />
+              Instantly Integration
+            </CardTitle>
+            <CardDescription>
+              Push enriched leads to Instantly for email campaigns
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="space-y-0.5">
+                <Label>Instantly Status</Label>
+                <p className="text-xs text-muted-foreground">
+                  Configure via INSTANTLY_API_KEY and INSTANTLY_CAMPAIGN_ID env vars
+                </p>
+              </div>
+              <Badge variant={integrations?.instantly.configured ? "default" : "secondary"} data-testid="badge-instantly-status">
+                {integrations?.instantly.configured ? "Ready" : "Not Configured"}
+              </Badge>
+            </div>
+            {integrations?.instantly.configured && integrations.instantly.campaignId && (
+              <div className="rounded-md bg-muted p-3 text-xs">
+                <p className="text-muted-foreground">
+                  Campaign ID: <code>{integrations.instantly.campaignId}</code>
+                </p>
+              </div>
+            )}
+            {!integrations?.instantly.configured && (
+              <div className="rounded-md bg-muted p-3 text-xs">
+                <p className="text-muted-foreground">
+                  Set these environment variables to enable Instantly:
+                </p>
+                <ul className="list-disc list-inside mt-1 space-y-1">
+                  <li><code>INSTANTLY_API_KEY</code></li>
+                  <li><code>INSTANTLY_CAMPAIGN_ID</code></li>
+                </ul>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -215,7 +285,7 @@ export default function SettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="space-y-0.5">
                 <Label>Email Notifications</Label>
                 <p className="text-xs text-muted-foreground">
@@ -242,7 +312,7 @@ export default function SettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="space-y-0.5">
                 <Label>Auto-Retry Failed Items</Label>
                 <p className="text-xs text-muted-foreground">
@@ -275,7 +345,7 @@ export default function SettingsPage() {
         </Card>
 
         <Card className="border-green-500/20 bg-green-500/5">
-          <CardContent className="flex items-center gap-4 py-4">
+          <CardContent className="flex items-center gap-4 py-4 flex-wrap">
             <Check className="h-5 w-5 text-green-600" />
             <div>
               <p className="text-sm font-medium">System Status</p>
