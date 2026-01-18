@@ -177,34 +177,61 @@ export default function SettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div className="space-y-0.5">
-                <Label>Require API Key for Inbound</Label>
-                <p className="text-xs text-muted-foreground">
-                  When enabled, inbound requests must include X-API-Key header
-                </p>
-              </div>
-              <Switch
-                checked={apiKeyEnabled}
-                onCheckedChange={setApiKeyEnabled}
-                data-testid="switch-api-key"
-              />
-            </div>
-            <div className="rounded-md bg-muted p-3 text-xs space-y-2">
+            <div className="rounded-md border p-4 space-y-3">
               <div className="flex items-center justify-between flex-wrap gap-2">
-                <p className="font-medium">Inbound Intake Endpoint:</p>
-                <Badge variant={integrations?.inbound.apiKeyConfigured ? "default" : "secondary"} data-testid="badge-api-key-status">
-                  API_INTAKE_KEY: {integrations?.inbound.apiKeyConfigured ? "Configured" : "Not Set"}
+                <div className="space-y-0.5">
+                  <Label className="font-medium">Require API Key for Inbound</Label>
+                  <p className="text-xs text-muted-foreground">
+                    When enabled, inbound requests must include X-API-Key header
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Badge 
+                    variant={apiKeyEnabled ? "default" : "secondary"} 
+                    data-testid="badge-require-api-key-status"
+                  >
+                    {apiKeyEnabled ? "Required" : "Not Required"}
+                  </Badge>
+                  <Switch
+                    checked={apiKeyEnabled}
+                    onCheckedChange={setApiKeyEnabled}
+                    data-testid="switch-api-key"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex items-center justify-between flex-wrap gap-2 pt-2 border-t">
+                <div className="space-y-0.5">
+                  <Label className="font-medium">API_INTAKE_KEY Environment Variable</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Set in Railway/Replit environment variables (not typed here)
+                  </p>
+                </div>
+                <Badge 
+                  variant={integrations?.inbound.apiKeyConfigured ? "default" : "destructive"} 
+                  data-testid="badge-api-key-env-status"
+                >
+                  {integrations?.inbound.apiKeyConfigured ? "Configured" : "Not Set"}
                 </Badge>
               </div>
-              <code className="text-primary block">POST /api/intake</code>
-              <p className="text-muted-foreground">
-                Header: <code>X-API-Key: [your API_INTAKE_KEY]</code>
-              </p>
+            </div>
+            
+            <div className="rounded-md bg-muted p-3 text-xs space-y-2">
+              <p className="font-medium">How it works:</p>
+              <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                <li>Endpoint: <code className="text-primary">POST /api/intake</code></li>
+                <li>Header: <code className="text-primary">X-API-Key: [your API_INTAKE_KEY value]</code></li>
+                <li>The key value is set in Railway/Replit env vars, not in this UI</li>
+              </ul>
               {apiKeyEnabled && !integrations?.inbound.apiKeyConfigured && (
-                <p className="text-orange-600 dark:text-orange-400">
-                  Set API_INTAKE_KEY in environment variables to protect this endpoint
-                </p>
+                <div className="mt-2 p-2 rounded bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300">
+                  Warning: API key is required but API_INTAKE_KEY env var is not set. Intake requests will be rejected.
+                </div>
+              )}
+              {!apiKeyEnabled && (
+                <div className="mt-2 p-2 rounded bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300">
+                  Note: API key is not required. Anyone can send leads to /api/intake.
+                </div>
               )}
             </div>
           </CardContent>

@@ -933,6 +933,87 @@ export async function registerRoutes(
     }
   });
 
+  // Settings self-test endpoint - verifies settings read/write works
+  app.get("/api/settings/selftest", async (_req: Request, res: Response) => {
+    const results: { step: string; success: boolean; detail?: any }[] = [];
+    const testMarker = `selftest-${Date.now()}`;
+    let originalSettings: any = null;
+    
+    try {
+      // Step 1: Read current settings
+      try {
+        originalSettings = await storage.getSettings();
+        results.push({ 
+          step: "read_settings", 
+          success: true, 
+          detail: originalSettings ? { id: originalSettings.id, apiKeyEnabled: originalSettings.apiKeyEnabled } : { status: "no_settings_yet" }
+        });
+      } catch (err: any) {
+        results.push({ step: "read_settings", success: false, detail: err?.message });
+      }
+
+      // Step 2: Write test value
+      try {
+        const testWrite = await storage.upsertSettings({
+          webhookUrl: testMarker,
+          apiKeyEnabled: originalSettings?.apiKeyEnabled ?? false,
+          emailNotifications: originalSettings?.emailNotifications ?? false,
+          autoRetryEnabled: originalSettings?.autoRetryEnabled ?? true,
+          maxRetries: originalSettings?.maxRetries ?? 3,
+        });
+        results.push({ 
+          step: "write_test_value", 
+          success: testWrite.webhookUrl === testMarker, 
+          detail: { written: testWrite.webhookUrl === testMarker }
+        });
+      } catch (err: any) {
+        results.push({ step: "write_test_value", success: false, detail: err?.message });
+      }
+
+      // Step 3: Read back test value
+      try {
+        const readBack = await storage.getSettings();
+        const matches = readBack?.webhookUrl === testMarker;
+        results.push({ 
+          step: "read_test_value", 
+          success: matches, 
+          detail: { matches, webhookUrl: readBack?.webhookUrl?.substring(0, 20) }
+        });
+      } catch (err: any) {
+        results.push({ step: "read_test_value", success: false, detail: err?.message });
+      }
+
+      // Step 4: Restore original value
+      try {
+        await storage.upsertSettings({
+          webhookUrl: originalSettings?.webhookUrl ?? null,
+          apiKeyEnabled: originalSettings?.apiKeyEnabled ?? false,
+          emailNotifications: originalSettings?.emailNotifications ?? false,
+          autoRetryEnabled: originalSettings?.autoRetryEnabled ?? true,
+          maxRetries: originalSettings?.maxRetries ?? 3,
+        });
+        results.push({ step: "restore_original", success: true });
+      } catch (err: any) {
+        results.push({ step: "restore_original", success: false, detail: err?.message });
+      }
+
+      const allPassed = results.every(r => r.success);
+      res.json({
+        success: allPassed,
+        message: allPassed ? "Settings read/write verified" : "Some tests failed",
+        results,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        message: "Settings selftest failed",
+        error: error?.message || String(error),
+        results,
+      });
+    }
+  });
+
   // Integration status endpoint - shows configured integrations
   app.get("/api/integrations/status", isAuthenticated, async (_req: Request, res: Response) => {
     const apiKeyConfigured = !!(process.env.API_INTAKE_KEY || process.env.API_KEY);
