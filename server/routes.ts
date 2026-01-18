@@ -9,7 +9,7 @@ import { setupAuth, registerAuthRoutes, isAuthenticated, getActiveAuthProvider, 
 import { isSupabaseConfigured } from "./lib/supabase";
 import { db } from "./db";
 import { getSystemHealth, withTimeout, categorizeError } from "./lib/guardrails";
-import { getEnvPresenceFlags, getAppVersion } from "./lib/env";
+import { getEnvPresenceFlags, getAppVersion, checkDependencies } from "./lib/env";
 import { getLastLogs, crashLog } from "./lib/crash-logger";
 
 const upload = multer({
@@ -160,6 +160,37 @@ export async function registerRoutes(
         env: getEnvPresenceFlags(),
         category: categorized.category,
         isRecoverable: categorized.isRecoverable,
+      });
+    }
+  });
+
+  // Readiness check endpoint (for Kubernetes/container orchestration)
+  // Returns 200 only when all dependencies are ready
+  app.get("/api/ready", async (_req: Request, res: Response) => {
+    try {
+      const deps = await checkDependencies();
+      
+      if (deps.ready) {
+        res.json({
+          ready: true,
+          status: "ready",
+          dependencies: deps.details,
+          timestamp: new Date().toISOString(),
+        });
+      } else {
+        res.status(503).json({
+          ready: false,
+          status: "not_ready",
+          dependencies: deps.details,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } catch (error: any) {
+      res.status(503).json({
+        ready: false,
+        status: "error",
+        error: error.message || "Readiness check failed",
+        timestamp: new Date().toISOString(),
       });
     }
   });

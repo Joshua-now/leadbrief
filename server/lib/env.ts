@@ -153,3 +153,102 @@ export function isReplit(): boolean {
 export function isReplitDeployment(): boolean {
   return process.env.REPLIT_DEPLOYMENT === 'true';
 }
+
+// Fail-fast startup validation
+// Call this early in boot - exits process if critical vars are missing
+export function validateOrExit(): void {
+  const result = validateEnvironment();
+  
+  logEnvironmentStatus();
+  
+  if (!result.isValid) {
+    console.error('\n========================================');
+    console.error('FATAL: Missing required environment variables');
+    console.error('========================================');
+    console.error('Missing:', result.missing.join(', '));
+    console.error('\nSee .env.example for required variables.');
+    console.error('See RUNBOOK.md for setup instructions.');
+    console.error('========================================\n');
+    
+    // In production, exit immediately
+    if (process.env.NODE_ENV === 'production') {
+      process.exit(1);
+    }
+    // In development, log warning but continue
+    console.warn('[Env] Continuing in development mode with missing vars...');
+  }
+}
+
+// Check if all critical dependencies are ready
+export interface DependencyStatus {
+  database: boolean;
+  auth: boolean;
+  ready: boolean;
+  details: Record<string, string>;
+}
+
+export async function checkDependencies(): Promise<DependencyStatus> {
+  const details: Record<string, string> = {};
+  let database = false;
+  let auth = false;
+  
+  // Check database with detailed error handling
+  const dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl) {
+    details.database = 'DATABASE_URL not configured';
+  } else {
+    try {
+      const { storage } = await import('../storage');
+      const startTime = Date.now();
+      await storage.getBulkJobs(1);
+      const latencyMs = Date.now() - startTime;
+      database = true;
+      details.database = `connected (${latencyMs}ms)`;
+    } catch (e: any) {
+      const errorMsg = e.message || 'connection failed';
+      
+      // Categorize database errors for better diagnostics
+      if (errorMsg.includes('does not exist')) {
+        details.database = `schema_missing: ${errorMsg}`;
+      } else if (errorMsg.includes('connection') || errorMsg.includes('ECONNREFUSED')) {
+        details.database = `connection_failed: ${errorMsg}`;
+      } else if (errorMsg.includes('authentication') || errorMsg.includes('password')) {
+        details.database = `auth_failed: credentials invalid`;
+      } else {
+        details.database = `error: ${errorMsg}`;
+      }
+      
+      console.error('[Ready] Database check failed:', errorMsg);
+    }
+  }
+  
+  // Check auth configuration
+  const isReplitEnv = !!process.env.REPL_ID;
+  const hasSupabase = !!(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY);
+  
+  if (isReplitEnv) {
+    auth = true;
+    details.auth = 'replit (OIDC)';
+  } else if (hasSupabase) {
+    auth = true;
+    details.auth = 'supabase (JWT)';
+  } else {
+    details.auth = 'not_configured: set REPL_ID or SUPABASE_URL+SUPABASE_ANON_KEY';
+  }
+  
+  const ready = database && auth;
+  
+  // Log readiness status for observability
+  if (ready) {
+    console.log('[Ready] All dependencies ready:', details);
+  } else {
+    console.warn('[Ready] Not ready:', details);
+  }
+  
+  return {
+    database,
+    auth,
+    ready,
+    details,
+  };
+}

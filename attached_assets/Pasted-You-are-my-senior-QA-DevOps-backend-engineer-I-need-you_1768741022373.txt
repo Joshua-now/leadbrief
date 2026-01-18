@@ -1,0 +1,172 @@
+You are my senior QA + DevOps + backend engineer. I need you to stop patching one issue at a time and instead stabilize the entire codebase.
+
+Goal
+
+Make [APP_NAME] run reliably in production and prove it with automated tests + a repeatable checklist. I’ve spent 4 days on this and I need the system to work end-to-end so I can start sending outreach emails.
+
+Non-negotiable requirements
+
+You must produce an end-to-end “green” verification that covers every critical path.
+
+You must add automated tests (unit + integration) and a one-command test runner.
+
+You must add health checks, structured logging, and clear error messages so failures are diagnosable.
+
+You must not leave any step “manual” or “assumed.” Everything should be verifiable.
+
+What you must do (step-by-step)
+Phase 1 — Inventory + Runbook
+
+Identify the full runtime architecture: entrypoints, routes, background jobs, DB access, third-party APIs, and any queues.
+
+Create a RUNBOOK.md with:
+
+How to run locally
+
+How to run in production
+
+Required environment variables (with examples)
+
+Common failure modes and how to diagnose them
+
+Phase 2 — Environment + Configuration Hardening
+
+Add a startup config validator that fails fast with helpful messages if env vars are missing/malformed.
+
+Provide a .env.example listing all required vars.
+
+Confirm DB connectivity works in the current hosting environment (Railway/Supabase pooler IPv4 issues are common). If applicable, ensure sslmode=require and pooler settings are correct.
+
+Phase 3 — Automated Tests (Must be comprehensive)
+
+Create tests that cover:
+
+App boots successfully (no runtime errors)
+
+DB connection works (migrate + simple query)
+
+Intake endpoint accepts:
+
+single lead JSON
+
+array of leads
+
+csv/text payload (if supported)
+
+Normalization produces the expected canonical schema
+
+Dedupe/upsert logic works (same lead doesn’t create duplicates)
+
+Website scraping:
+
+timeouts are enforced
+
+non-200 responses handled
+
+HTML text extraction works
+
+Email-finder integration (mocked):
+
+valid email passes
+
+risky/invalid filtered
+
+AI personalization (mocked):
+
+correct prompt structure
+
+output validation + fallback
+
+Push to Instantly (mocked):
+
+request format correct
+
+429/rate limiting handled
+
+response parsing + saved IDs correct
+
+Logging:
+
+all major stages emit a structured log line
+
+errors include correlation id / lead_id
+
+Testing requirements
+
+Use mocks for third-party APIs (Instantly, email finder, OpenAI, scraping) so tests are deterministic.
+
+Provide npm test or pytest style single command.
+
+Add CI-like script: ./verify.sh that runs:
+
+lint
+
+typecheck (if TS)
+
+unit tests
+
+integration tests
+
+starts server and hits /health
+
+Phase 4 — Observability + Health
+
+Add /health endpoint: returns ok only if:
+
+app is running
+
+DB reachable
+
+required integrations configured
+
+Add /ready endpoint (or similar) if this is containerized: returns ok only after migrations complete and dependencies ok.
+
+Add structured logs with:
+
+request_id / correlation_id
+
+lead_id where applicable
+
+stage name (intake/enrich/personalize/push)
+
+error details without leaking secrets
+
+Phase 5 — Fix Root Causes (Not Symptoms)
+
+For every failure found during tests, fix the underlying cause and expand tests to prevent regressions.
+
+Do not stop at “works on my machine.” Prove it works via the verify script.
+
+Deliverables I want in the repo
+
+RUNBOOK.md
+
+.env.example
+
+verify.sh (one-command verification)
+
+Tests folder with meaningful coverage
+
+A final summary listing:
+
+what was broken
+
+what you changed
+
+how to run verification
+
+what remains optional
+
+Output format (important)
+
+Work in this order:
+
+Show me a checklist of every component you will test
+
+Implement verify script + tests
+
+Fix issues until verify passes
+
+Report final status with exact commands to run
+
+If anything is ambiguous, make a reasonable assumption and document it in RUNBOOK. Do not ask me to do manual steps besides adding environment variables.
