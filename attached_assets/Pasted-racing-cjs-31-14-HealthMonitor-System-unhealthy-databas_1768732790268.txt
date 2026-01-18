@@ -1,0 +1,50 @@
+racing.cjs:31:14)
+[HealthMonitor] System unhealthy: {"database":{"healthy":false,"latencyMs":1,"error":"Cannot read properties of undefined (reading 'searchParams')"},"memory":{"used":32,"total":34,"percentUsed":95,"isHealthy":false},"processor":{"healthy":false,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+[HealthMonitor] System unhealthy: {"database":{"healthy":false,"latencyMs":1,"error":"Cannot read properties of undefined (reading 'searchParams')"},"memory":{"used":32,"total":34,"percentUsed":93,"isHealthy":false},"processor":{"healthy":false,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+[Auth] /api/auth/user request, provider: supabase
+[Supabase Server] verifyToken success for user: 731baced-7680-4428-8d41-16c147197e17
+    at BoundPool.newClient (/app/node_modules/pg-pool/index.js:233:20)
+[Auth] Error fetching Supabase user: TypeError: Cannot read properties of undefined (reading 'searchParams')
+    at BoundPool.connect (/app/node_modules/pg-pool/index.js:227:10)
+    at parse (/app/node_modules/pg-connection-string/index.js:39:30)
+    at new ConnectionParameters (/app/node_modules/pg/lib/connection-parameters.js:56:42)
+    at BoundPool.query (/app/node_modules/pg-pool/index.js:411:10)
+    at /app/node_modules/drizzle-orm/node-postgres/session.cjs:124:23
+    at new Client (/app/node_modules/pg/lib/client.js:18:33)
+    at Object.startActiveSpan (/app/node_modules/drizzle-orm/tracing.cjs:31:14)
+    at /app/node_modules/drizzle-orm/node-postgres/session.cjs:118:50
+    at Object.startActiveSpan (/app/node_modules/drizzle-orm/tracing.cjs:31:14)
+10:35:47 AM [express] GET /api/auth/user 500 in 137ms :: {"message":"Failed to fetch user"}
+[HealthMonitor] System unhealthy: {"database":{"healthy":false,"latencyMs":1,"error":"Cannot read properties of undefined (reading 'searchParams')"},"memory":{"used":32,"total":34,"percentUsed":94,"isHealthy":false},"processor":{"healthy":false,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+[HealthMonitor] System unhealthy: {"database":{"healthy":false,"latencyMs":2,"error":"Cannot read properties of undefined (reading 'searchParams')"},"memory":{"used":32,"total":34,"percentUsed":94,"isHealthy":false},"processor":{"healthy":false,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+10:37:23 AM [express] GET /api/auth/config 304 in 1ms :: {"provider":"supabase","isEnabled":true,"supabaseConfigured":true}
+[Auth] /api/auth/user request, provider: supabase
+[Supabase Server] verifyToken success for user: 731baced-7680-4428-8d41-16c147197e17
+[Auth] Error fetching Supabase user: TypeError: Cannot read properties of undefined (reading 'searchParams')
+    at parse (/app/node_modules/pg-connection-string/index.js:39:30)
+    at new ConnectionParameters (/app/node_modules/pg/lib/connection-parameters.js:56:42)
+    at new Client (/app/node_modules/pg/lib/client.js:18:33)
+    at BoundPool.newClient (/app/node_modules/pg-pool/index.js:233:20)
+    at BoundPool.connect (/app/node_modules/pg-pool/index.js:227:10)
+    at BoundPool.query (/app/node_modules/pg-pool/index.js:411:10)
+    at /app/node_modules/drizzle-orm/node-postgres/session.cjs:124:23
+    at Object.startActiveSpan (/app/node_modules/drizzle-orm/tracing.cjs:31:14)
+    at /app/node_modules/drizzle-orm/node-postgres/session.cjs:118:50
+    at Object.startActiveSpan (/app/node_modules/drizzle-orm/tracing.cjs:31:14)
+10:37:25 AM [express] GET /api/auth/user 500 in 134ms :: {"message":"Failed to fetch user"}
+10:37:26 AM [express] GET /api/auth/config 304 in 1ms :: {"provider":"supabase","isEnabled":true,"supabaseConfigured":true}
+[Auth] /api/auth/user request, provider: supabase
+[Supabase Server] verifyToken success for user: 731baced-7680-4428-8d41-16c147197e17
+[Auth] Error fetching Supabase user: TypeError: Cannot read properties of undefined (reading 'searchParams')
+    at parse (/app/node_modules/pg-connection-string/index.js:39:30)
+    at new ConnectionParameters (/app/node_modules/pg/lib/connection-parameters.js:56:42)
+10:37:27 AM [express] GET /api/auth/user 500 in 51ms :: {"message":"Failed to fetch user"}
+    at new Client (/app/node_modules/pg/lib/client.js:18:33)
+    at BoundPool.newClient (/app/node_modules/pg-pool/index.js:233:20)
+    at BoundPool.connect (/app/node_modules/pg-pool/index.js:227:10)
+    at BoundPool.query (/app/node_modules/pg-pool/index.js:411:10)
+    at /app/node_modules/drizzle-orm/node-postgres/session.cjs:124:23
+    at Object.startActiveSpan (/app/node_modules/drizzle-orm/tracing.cjs:31:14)
+    at /app/node_modules/drizzle-orm/node-postgres/session.cjs:118:50
+    at Object.startActiveSpan (/app/node_modules/drizzle-orm/tracing.cjs:31:14)
+[HealthMonitor] System unhealthy: {"database":{"healthy":false,"latencyMs":1,"error":"Cannot read properties of undefined (reading 'searchParams')"},"memory":{"used":32,"total":34,"percentUsed":95,"isHealthy":false},"processor":{"healthy":false,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
