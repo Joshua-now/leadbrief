@@ -15,8 +15,8 @@ const SECRETS = new Set([
   'SESSION_SECRET',
   'SUPABASE_ANON_KEY',
   'SUPABASE_SERVICE_ROLE_KEY',
-  'API_KEY',
-  'API_INTAKE_KEY',
+  'API_KEY',           // Legacy fallback
+  'API_INTAKE_KEY',    // Preferred name
   'DEBUG_KEY',
   'INSTANTLY_API_KEY',
 ]);
@@ -28,13 +28,12 @@ const REQUIRED_FOR_RAILWAY = [
   'SESSION_SECRET',
 ] as const;
 
-// Optional but useful
+// Optional but useful (API_INTAKE_KEY is canonical; API_KEY is legacy fallback)
 const OPTIONAL_VARS = [
   'SUPABASE_SERVICE_ROLE_KEY',
   'DATABASE_URL',
   'APP_URL',
-  'API_KEY',
-  'API_INTAKE_KEY',
+  'API_INTAKE_KEY',  // Canonical name for intake auth
   'DEBUG_KEY',
   'INSTANTLY_API_KEY',
   'INSTANTLY_CAMPAIGN_ID',
