@@ -123,14 +123,16 @@ The backend uses a modular route registration pattern with dedicated storage abs
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/import/bulk` | POST | Bulk import CSV/JSON/email list |
-| `/api/intake` | POST | Single contact intake (GHL webhook compatible) |
+| `/api/intake` | POST | Single contact intake (requires X-API-Key when API_INTAKE_KEY is set) |
 | `/api/jobs` | GET | List all jobs |
 | `/api/jobs/:id` | GET | Get job details with stats |
 | `/api/jobs/:id/retry` | POST | Retry failed job |
 | `/api/jobs/recover` | POST | Recover stale jobs |
 | `/api/contacts` | GET | List contacts (paginated) |
 | `/api/contacts/:id` | GET | Get contact details |
-| `/api/health` | GET | System health check |
+| `/api/health` | GET | System health check (liveness) |
+| `/api/ready` | GET | Dependency readiness check |
+| `/api/finalcheck` | GET | Comprehensive verification (tests health, ready, intake auth, DB write) |
 | `/api/config/limits` | GET | Get import limits |
 | `/api/auth/user` | GET | Get current authenticated user |
 | `/api/settings` | GET/POST | User settings (protected) |
