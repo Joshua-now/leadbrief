@@ -83,34 +83,7 @@ async function processItem(
     return { success: false, isDuplicate: false, error: "Missing required identifier (email, phone, or LinkedIn URL)" };
   }
 
-  // Check for duplicates by email
-  if (data.email) {
-    const existing = await storage.getContactByEmail(data.email);
-    if (existing) {
-      await storage.updateBulkJobItem(item.id, {
-        status: "complete",
-        contactId: existing.id,
-        matchedContactId: existing.id,
-        matchConfidence: "100",
-      });
-      return { success: true, isDuplicate: true };
-    }
-  }
-
-  // Check for duplicates by company + city (if no email)
   const companyName = data.company || data.companyName;
-  if (!data.email && companyName && data.city) {
-    const existingByCompany = await storage.getContactByCompanyAndCity(companyName, data.city);
-    if (existingByCompany) {
-      await storage.updateBulkJobItem(item.id, {
-        status: "complete",
-        contactId: existingByCompany.id,
-        matchedContactId: existingByCompany.id,
-        matchConfidence: "80",
-      });
-      return { success: true, isDuplicate: true };
-    }
-  }
 
   // STEP 1: Scrape website if available
   const websiteUrl = data.companyDomain || data.websiteUrl || data.website || data.url;
@@ -168,8 +141,8 @@ async function processItem(
   const finalCategory = data.category || businessIntel.industry || null;
   const finalWebsite = websiteUrl || data.websiteUrl || null;
 
-  // Create contact with validated data (including new fields)
-  const contact = await storage.createContact({
+  // Create or merge contact with validated data (including new fields)
+  const mergeResult = await storage.mergeContact({
     email: data.email || null,
     phone: data.phone || businessIntel.contactInfo.phone || null,
     firstName: firstName || null,
@@ -184,7 +157,10 @@ async function processItem(
     companyId,
     linkedinUrl: data.linkedinUrl || null,
     dataQualityScore: String(qualityScore),
-  });
+  }, 'import');
+  
+  const contact = mergeResult.contact;
+  const isDuplicate = !mergeResult.isNew;
 
   // Build enrichment data object
   const enrichmentData = {
@@ -212,11 +188,16 @@ async function processItem(
     icebreaker: personalization.icebreaker,
     confidenceScore: String(confidenceScore),
     confidenceRationale,
+    matchedContactId: isDuplicate ? contact.id : null,
+    matchConfidence: isDuplicate ? (mergeResult.matchedBy === 'email' ? "100" : mergeResult.matchedBy === 'domain' ? "90" : "80") : null,
   });
 
-  console.log(`[Enrichment] Completed item ${item.id}: confidence=${confidenceScore}, bullets=${personalization.bullets.length}`);
+  const matchInfo = isDuplicate 
+    ? `merged (matched by ${mergeResult.matchedBy}, updated: ${mergeResult.fieldsUpdated.join(',')})`
+    : 'new';
+  console.log(`[Enrichment] Completed item ${item.id}: ${matchInfo}, confidence=${confidenceScore}, bullets=${personalization.bullets.length}`);
 
-  return { success: true, isDuplicate: false };
+  return { success: true, isDuplicate };
 }
 
 // Main job processor with self-healing

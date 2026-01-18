@@ -912,7 +912,15 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Maximum 100 leads per request" });
       }
 
-      const results: Array<{ success: boolean; contactId?: string; email?: string; error?: string }> = [];
+      const results: Array<{ 
+        success: boolean; 
+        contactId?: string; 
+        email?: string; 
+        error?: string;
+        isNew?: boolean;
+        matchedBy?: string | null;
+        fieldsUpdated?: string[];
+      }> = [];
 
       for (const lead of leads) {
         try {
@@ -959,8 +967,8 @@ export async function registerRoutes(
             companyId = companyRecord.id;
           }
 
-          // Create or update contact with all fields
-          const contact = await storage.upsertContact({
+          // Use mergeContact for idempotent upsert with deduplication
+          const mergeResult = await storage.mergeContact({
             email: contactEmail || null,
             phone: contactPhone || null,
             firstName: contactFirstName?.slice(0, 200) || null,
@@ -974,9 +982,16 @@ export async function registerRoutes(
             category: contactCategory?.slice(0, 200) || null,
             companyId,
             linkedinUrl: linkedinUrl?.slice(0, 500) || null,
-          });
+          }, 'intake');
 
-          results.push({ success: true, contactId: contact.id, email: contactEmail });
+          results.push({ 
+            success: true, 
+            contactId: mergeResult.contact.id, 
+            email: contactEmail,
+            isNew: mergeResult.isNew,
+            matchedBy: mergeResult.matchedBy,
+            fieldsUpdated: mergeResult.fieldsUpdated,
+          });
         } catch (e: any) {
           results.push({ success: false, error: e.message });
         }
@@ -1018,6 +1033,9 @@ export async function registerRoutes(
             contactId: result.contactId,
             jobId: job.id,
             status: "complete",
+            isNew: result.isNew,
+            matchedBy: result.matchedBy,
+            fieldsUpdated: result.fieldsUpdated,
           });
         } else {
           return res.status(400).json({ success: false, error: result.error });
