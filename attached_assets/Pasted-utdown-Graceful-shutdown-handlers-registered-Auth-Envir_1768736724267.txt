@@ -1,0 +1,111 @@
+utdown] Graceful shutdown handlers registered
+[Auth] Environment: Railway
+[Auth] REPL_ID: NO
+[Auth] SUPABASE_URL: YES
+[Auth] SUPABASE_ANON_KEY: YES
+[Supabase Server] isConfigured: true (url: true, key: true)
+11:37:01 AM [express] serving on port 8080
+[HealthMonitor] Started health monitoring
+[Static] Serving static files from: /app/dist/public
+[Auth] Active provider: supabase
+[Static] Directory exists: true
+[Auth] Setting up Supabase Auth routes (stateless JWT-only)
+[HealthMonitor] System unhealthy: {"database":{"healthy":false,"latencyMs":88,"error":"Tenant or user not found"},"memory":{"used":28,"total":29,"percentUsed":96,"isHealthy":false},"processor":{"healthy":false,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+[HealthMonitor] System unhealthy: {"database":{"healthy":false,"latencyMs":28,"error":"Tenant or user not found"},"memory":{"used":29,"total":30,"percentUsed":96,"isHealthy":false},"processor":{"healthy":false,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+[HealthMonitor] System unhealthy: {"database":{"healthy":false,"latencyMs":22,"error":"Tenant or user not found"},"memory":{"used":28,"total":31,"percentUsed":91,"isHealthy":false},"processor":{"healthy":false,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+[HealthMonitor] System unhealthy: {"database":{"healthy":false,"latencyMs":31,"error":"Tenant or user not found"},"memory":{"used":28,"total":31,"percentUsed":93,"isHealthy":false},"processor":{"healthy":false,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+Error recovering stale jobs: error: Tenant or user not found
+    at /app/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async /app/node_modules/drizzle-orm/node-postgres/session.cjs:118:22
+    at async le (/app/dist/index.cjs:4:15406)
+    at async ct (/app/dist/index.cjs:4:29121)
+    at async Timeout._onTimeout (/app/dist/index.cjs:4:29686) {
+  length: 52,
+  severity: 'FATAL',
+  code: 'XX000',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: undefined,
+  line: undefined,
+  routine: undefined
+}
+[HealthMonitor] System unhealthy: {"database":{"healthy":false,"latencyMs":25,"error":"Tenant or user not found"},"memory":{"used":29,"total":31,"percentUsed":94,"isHealthy":false},"processor":{"healthy":false,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+  severity: 'FATAL',
+  code: 'XX000',
+  detail: undefined,
+  hint: undefined,
+    at /app/node_modules/pg-pool/index.js:45:11
+  position: undefined,
+[Supabase Server] verifyToken success for user: 731baced-7680-4428-8d41-16c147197e17
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+[Auth] /api/auth/user request, provider: supabase
+    at async /app/node_modules/drizzle-orm/node-postgres/session.cjs:118:22
+[Auth] Error fetching Supabase user: error: Tenant or user not found
+    at async be.upsertUser (/app/dist/index.cjs:4:19827)
+[Supabase Server] Creating Supabase client
+    at async /app/dist/index.cjs:4:26821 {
+11:42:34 AM [express] GET /api/auth/config 304 in 2ms :: {"provider":"supabase","isEnabled":true,"supabaseConfigured":true,"supabase":{"url":"https://ronwuihuduazbasbjlbd.supabase.co","anonKey":"sb_publishable_Bu9tB5qh6P277hp-ixJyVA_EsctNRkH"}}
+  length: 52,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: undefined,
+  line: undefined,
+  routine: undefined
+}
+11:42:34 AM [express] GET /api/auth/user 500 in 308ms :: {"message":"Failed to fetch user"}
+11:42:37 AM [express] GET /api/auth/config 304 in 3ms :: {"provider":"supabase","isEnabled":true,"supabaseConfigured":true,"supabase":{"url":"https://ronwuihuduazbasbjlbd.supabase.co","anonKey":"sb_publishable_Bu9tB5qh6P277hp-ixJyVA_EsctNRkH"}}
+[Auth] /api/auth/user request, provider: supabase
+[Supabase Server] verifyToken success for user: 731baced-7680-4428-8d41-16c147197e17
+[Auth] Error fetching Supabase user: error: Tenant or user not found
+    at /app/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async /app/node_modules/drizzle-orm/node-postgres/session.cjs:118:22
+    at async be.upsertUser (/app/dist/index.cjs:4:19827)
+    at async /app/dist/index.cjs:4:26821 {
+  length: 52,
+  severity: 'FATAL',
+  code: 'XX000',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: undefined,
+  line: undefined,
+  routine: undefined
+}
+11:42:40 AM [express] GET /api/auth/user 500 in 80ms :: {"message":"Failed to fetch user"}
+11:42:40 AM [express] GET /api/auth/config 304 in 1ms :: {"provider":"supabase","isEnabled":true,"supabaseConfigured":true,"supabase":{"url":"https://ronwuihuduazbasbjlbd.supabase.co","anonKey":"sb_publishable_Bu9tB5qh6P277hp-ixJyVA_EsctNRkH"}}
+11:42:40 AM [express] GET /api/auth/config 304 in 1ms :: {"provider":"supabase","isEnabled":true,"supabaseConfigured":true,"supabase":{"url":"https://ronwuihuduazbasbjlbd.supabase.co","anonKey":"sb_publishable_Bu9tB5qh6P277hp-ixJyVA_EsctNRkH"}}
+[Auth] /api/auth/user request, provider: supabase
+[Supabase Server] verifyToken success for user: 731baced-7680-4428-8d41-16c147197e17
+[Auth] Error fetching Supabase user: error: Tenant or user not found
+    at /app/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async /app/node_modules/drizzle-orm/node-postgres/session.cjs:118:22
+    at async be.upsertUser (/app/dist/index.cjs:4:19827)
+    at async /app/dist/index.cjs:4:26821 {
+  length: 52,
+  severity: 'FATAL',
