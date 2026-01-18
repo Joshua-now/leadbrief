@@ -933,8 +933,8 @@ export async function registerRoutes(
     }
   });
 
-  // Settings self-test endpoint - verifies settings read/write works
-  app.get("/api/settings/selftest", async (_req: Request, res: Response) => {
+  // Settings self-test endpoint - verifies settings read/write works (protected)
+  app.get("/api/settings/selftest", isAuthenticated, async (_req: Request, res: Response) => {
     const results: { step: string; success: boolean; detail?: any }[] = [];
     const testMarker = `selftest-${Date.now()}`;
     let originalSettings: any = null;
