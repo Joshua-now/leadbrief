@@ -144,20 +144,35 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createContact(contact: InsertContact): Promise<Contact> {
+    const normalized = normalizeContactFields(contact);
     const [created] = await db.insert(contacts).values({
       ...contact,
       email: contact.email?.toLowerCase(),
+      emailNorm: normalized.emailNorm,
+      domainNorm: normalized.domainNorm,
+      phoneNorm: normalized.phoneNorm,
+      sourceHash: normalized.sourceHash,
+      lastSeenAt: new Date(),
     }).returning();
     return created;
   }
 
   async upsertContact(contact: InsertContact): Promise<Contact> {
-    if (contact.email) {
-      const existing = await this.getContactByEmail(contact.email);
+    const normalized = normalizeContactFields(contact);
+    if (normalized.emailNorm) {
+      const existing = await this.getContactByEmailNorm(normalized.emailNorm);
       if (existing) {
         const [updated] = await db
           .update(contacts)
-          .set({ ...contact, email: contact.email.toLowerCase() })
+          .set({ 
+            ...contact, 
+            email: contact.email?.toLowerCase() || existing.email,
+            emailNorm: normalized.emailNorm,
+            domainNorm: normalized.domainNorm ?? existing.domainNorm,
+            phoneNorm: normalized.phoneNorm ?? existing.phoneNorm,
+            sourceHash: normalized.sourceHash,
+            lastSeenAt: new Date(),
+          })
           .where(eq(contacts.id, existing.id))
           .returning();
         return updated;
@@ -214,16 +229,16 @@ export class DatabaseStorage implements IStorage {
       fillIfMissing('category');
       fillIfMissing('linkedinUrl');
 
-      if (!existing.emailNorm && normalized.emailNorm) {
+      if (normalized.emailNorm && normalized.emailNorm !== existing.emailNorm) {
         mergedData.emailNorm = normalized.emailNorm;
       }
-      if (!existing.domainNorm && normalized.domainNorm) {
+      if (normalized.domainNorm && normalized.domainNorm !== existing.domainNorm) {
         mergedData.domainNorm = normalized.domainNorm;
       }
-      if (!existing.phoneNorm && normalized.phoneNorm) {
+      if (normalized.phoneNorm && normalized.phoneNorm !== existing.phoneNorm) {
         mergedData.phoneNorm = normalized.phoneNorm;
       }
-      if (!existing.sourceHash && normalized.sourceHash) {
+      if (normalized.sourceHash) {
         mergedData.sourceHash = normalized.sourceHash;
       }
 
