@@ -1,5 +1,7 @@
 import { storage } from "../storage";
 import { recoverStaleJobs, getProcessorHealth } from "./job-processor";
+import * as fs from "fs";
+import * as os from "os";
 
 // Prevent concurrent health checks and job recovery
 let isHealthCheckRunning = false;
@@ -125,10 +127,65 @@ export async function checkDatabaseHealth(): Promise<{
   }
 }
 
+// Container memory limit detection
+// Caches the detected limit to avoid repeated filesystem reads
+let cachedContainerMemoryLimitMB: number | null = null;
+
+/**
+ * Detects the actual container memory limit from cgroup files.
+ * - cgroup v2: /sys/fs/cgroup/memory.max
+ * - cgroup v1: /sys/fs/cgroup/memory/memory.limit_in_bytes
+ * - Fallback: os.totalmem() (physical RAM)
+ * 
+ * Returns limit in MB, cached after first detection.
+ */
+function getContainerMemoryLimitMB(): number {
+  if (cachedContainerMemoryLimitMB !== null) {
+    return cachedContainerMemoryLimitMB;
+  }
+  
+  const cgroupV2Path = "/sys/fs/cgroup/memory.max";
+  const cgroupV1Path = "/sys/fs/cgroup/memory/memory.limit_in_bytes";
+  
+  try {
+    // Try cgroup v2 first (modern containers like Railway)
+    if (fs.existsSync(cgroupV2Path)) {
+      const content = fs.readFileSync(cgroupV2Path, "utf8").trim();
+      if (content !== "max") {
+        const bytes = parseInt(content, 10);
+        if (!isNaN(bytes) && bytes > 0) {
+          cachedContainerMemoryLimitMB = Math.round(bytes / 1024 / 1024);
+          console.log(`[MemoryMonitor] Detected cgroup v2 limit: ${cachedContainerMemoryLimitMB}MB`);
+          return cachedContainerMemoryLimitMB;
+        }
+      }
+      // "max" means unlimited - fall through to os.totalmem()
+    }
+    
+    // Try cgroup v1
+    if (fs.existsSync(cgroupV1Path)) {
+      const content = fs.readFileSync(cgroupV1Path, "utf8").trim();
+      const bytes = parseInt(content, 10);
+      // Very large values (close to max int64) indicate "no limit"
+      if (!isNaN(bytes) && bytes > 0 && bytes < 9223372036854771712) {
+        cachedContainerMemoryLimitMB = Math.round(bytes / 1024 / 1024);
+        console.log(`[MemoryMonitor] Detected cgroup v1 limit: ${cachedContainerMemoryLimitMB}MB`);
+        return cachedContainerMemoryLimitMB;
+      }
+    }
+  } catch (err) {
+    // Cgroup access failed - fall through to OS total
+  }
+  
+  // Fallback to OS total memory
+  cachedContainerMemoryLimitMB = Math.round(os.totalmem() / 1024 / 1024);
+  console.log(`[MemoryMonitor] Using OS total memory: ${cachedContainerMemoryLimitMB}MB`);
+  return cachedContainerMemoryLimitMB;
+}
+
 // Memory usage check
 // Note: Memory percentage is INFORMATIONAL ONLY - does NOT affect liveness
-// Small containers (30MB) will naturally run at 90%+ which is completely normal
-// Only RSS > 500MB or heap at 99%+ indicates a real problem
+// RSS is compared against container memory limit (cgroup), not V8 heap
 export function getMemoryUsage(): {
   used: number;
   total: number;
@@ -136,27 +193,37 @@ export function getMemoryUsage(): {
   percentUsed: number;
   isHealthy: boolean;
   warning: boolean;
+  limitSource: string;
 } {
   const mem = process.memoryUsage();
-  const heapUsed = mem.heapUsed;
-  const heapTotal = mem.heapTotal;
-  const rss = mem.rss;
-  const percentUsed = Math.round((heapUsed / heapTotal) * 100);
+  const rssMB = Math.round(mem.rss / 1024 / 1024);
+  const containerLimitMB = getContainerMemoryLimitMB();
+  
+  // Calculate percentage based on RSS vs container limit
+  const percentUsed = Math.round((rssMB / containerLimitMB) * 100);
   
   // Memory is only critically unhealthy if:
-  // - Heap is at 99%+ (imminent OOM)
-  // - RSS exceeds 500MB (likely memory leak in production)
-  const rssMB = rss / 1024 / 1024;
-  const isHealthy = percentUsed < 99 && rssMB < 500;
-  const warning = percentUsed >= 95 || rssMB >= 400;
+  // - RSS is at 95%+ of container limit (imminent OOM kill)
+  // Warning at 80%+ of container limit
+  const isHealthy = percentUsed < 95;
+  const warning = percentUsed >= 80;
+  
+  // Determine limit source for debugging
+  let limitSource = "os_total";
+  if (fs.existsSync("/sys/fs/cgroup/memory.max")) {
+    limitSource = "cgroup_v2";
+  } else if (fs.existsSync("/sys/fs/cgroup/memory/memory.limit_in_bytes")) {
+    limitSource = "cgroup_v1";
+  }
   
   return {
-    used: Math.round(heapUsed / 1024 / 1024), // MB
-    total: Math.round(heapTotal / 1024 / 1024), // MB
-    rss: Math.round(rssMB), // MB
+    used: rssMB, // MB (RSS is actual memory footprint)
+    total: containerLimitMB, // MB (container limit, not heap)
+    rss: rssMB, // MB
     percentUsed,
     isHealthy,
     warning,
+    limitSource,
   };
 }
 
@@ -167,7 +234,7 @@ export async function getSystemHealth(): Promise<{
   status: "healthy" | "degraded" | "unhealthy";
   checks: {
     database: { healthy: boolean; latencyMs: number; error?: string };
-    memory: { used: number; total: number; rss: number; percentUsed: number; isHealthy: boolean; warning: boolean };
+    memory: { used: number; total: number; rss: number; percentUsed: number; isHealthy: boolean; warning: boolean; limitSource: string };
     processor: { healthy: boolean; pendingJobs: number; processingJobs: number; staleJobs: number };
     circuitBreakers: { name: string; isOpen: boolean; failures: number }[];
   };

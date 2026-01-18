@@ -521,6 +521,33 @@ LeadBrief has TWO webhook directions - make sure you configure the right one:
 
 ---
 
+## Memory Monitoring
+
+The HealthMonitor correctly detects container memory limits from cgroup files:
+
+### Memory Limit Detection Logic
+1. **cgroup v2** (Railway, modern containers): Reads `/sys/fs/cgroup/memory.max`
+2. **cgroup v1** (older containers): Reads `/sys/fs/cgroup/memory/memory.limit_in_bytes`
+3. **Fallback**: Uses `os.totalmem()` (physical RAM)
+
+The limit is cached after first detection to avoid repeated file reads.
+
+### Memory Health Thresholds
+- **Healthy**: RSS < 95% of container limit
+- **Warning**: RSS >= 80% of container limit (logged, no status change)
+- **Degraded**: RSS >= 95% of container limit (status degrades but not unhealthy)
+
+**Important**: Memory does NOT affect `/api/health` (liveness). Only database/processor issues cause unhealthy status.
+
+### Startup Log
+On first health check, you'll see:
+```
+[MemoryMonitor] Detected cgroup v2 limit: 8192MB
+```
+This confirms the real container limit is being used (not V8 heap ~30MB).
+
+---
+
 ## Health vs Ready Endpoints
 
 Two endpoints serve different purposes:
