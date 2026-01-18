@@ -1,0 +1,109 @@
+We need idempotent intake/import so re-uploading the same list does NOT create duplicates. Implement merge/upsert logic end-to-end for:
+
+CSV import
+
+POST /api/intake
+
+any enrichment re-processing
+
+1) Define canonical identity + normalization (must implement)
+
+Normalize these fields before matching:
+
+email_norm = lowercased + trimmed email
+
+domain_norm = extracted domain from website (strip http/https/www, trailing slashes, paths)
+
+phone_norm = digits only (remove punctuation, spaces, +1 handling)
+
+company_norm = trimmed, collapse whitespace (optional)
+
+2) Matching / merge precedence (must follow exactly)
+
+When a new lead arrives:
+
+If email exists → match by email_norm (case-insensitive exact match)
+
+Else if website/domain exists → match by domain_norm
+
+Else if phone exists → match by phone_norm
+
+Else → create a new contact
+
+3) Database constraints (required)
+
+Add columns (if not present):
+
+email_norm, domain_norm, phone_norm
+Add unique indexes (use partial unique indexes to allow nulls):
+
+unique on email_norm where not null
+
+unique on domain_norm where not null
+
+unique on phone_norm where not null
+
+This ensures the DB enforces de-dupe even if code has a bug.
+
+4) Merge strategy (must implement)
+
+If an existing contact is found:
+
+Do not overwrite good data with empties
+
+Update only when:
+
+existing field is null/empty AND new field has value, OR
+
+new field is “higher confidence” (tracked via field_sources / field_confidence)
+
+Always append/update enrichment metadata:
+
+sources[] (track where data came from: import, intake, outscraper, enrichment)
+
+last_seen_at timestamp
+
+Recompute Data Quality after merge
+
+Recommended merge behavior per field:
+
+email: keep existing if present; only set if missing
+
+phone: keep existing if present; only set if missing
+
+website/domain: keep existing if present; only set if missing
+
+company_name: keep existing if present; only set if missing
+
+city/state/address/category: fill missing values
+
+linkedin/title: fill missing values
+
+5) Idempotency keys / import tracking (required)
+
+Add:
+
+source_id or external_id (optional but recommended)
+
+source_hash = stable hash of key identifiers (email_norm/domain_norm/phone_norm)
+Store import batch id and row id so re-imports can be traced.
+
+6) Required proof tests (must paste results from Railway)
+
+Provide curl + screenshots/logs showing:
+Test A: Import the same CSV twice → contact count does NOT increase (no duplicates)
+Test B: First import missing website/city; second import includes them → the SAME contact gets updated with new fields
+Test C: POST /api/intake twice with same email → returns same contactId (or indicates “merged/updated”)
+Test D: Confirm DB constraints exist (show indexes or migration output)
+
+Do not claim complete until these tests pass on the Railway deployment.
+
+Optional “nice to have” (if the agent is capable)
+
+Add a UI indicator on contact:
+
+“Merged from X sources”
+
+“Last enriched at”
+
+“Fields updated in last import”
