@@ -19,15 +19,18 @@ if (!dbUrl) {
 let poolConfig: pg.PoolConfig;
 try {
   const url = new URL(dbUrl);
+  const isExternalDb = url.hostname.includes('supabase') || url.hostname.includes('pooler');
+  
   poolConfig = {
     host: url.hostname,
     port: parseInt(url.port) || 5432,
     database: url.pathname.slice(1),
     user: url.username,
     password: decodeURIComponent(url.password),
-    ssl: { rejectUnauthorized: false },
+    // Only enable SSL for external databases (Supabase, etc.)
+    ...(isExternalDb && { ssl: { rejectUnauthorized: false } }),
   };
-  console.log("[DB] Parsed config - host:", poolConfig.host, "port:", poolConfig.port, "database:", poolConfig.database);
+  console.log("[DB] Parsed config - host:", poolConfig.host, "port:", poolConfig.port, "database:", poolConfig.database, "ssl:", isExternalDb);
 } catch (e) {
   console.error("[DB] Failed to parse DATABASE_URL:", e);
   throw new Error("Invalid DATABASE_URL format");
