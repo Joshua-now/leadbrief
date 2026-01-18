@@ -196,7 +196,7 @@ These are automatically set by Replit:
 | `SUPABASE_ANON_KEY` | Yes | Railway | Supabase anon/public key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Recommended | Railway | Supabase service role key |
 | `APP_URL` | Recommended | Railway | App URL for auth redirects |
-| `API_INTAKE_KEY` | Optional | Both | API key for /api/intake endpoint (when API Settings enabled) |
+| `API_INTAKE_KEY` | Optional | Both | API key for /api/intake endpoint (enforced when set) |
 | `DEBUG_KEY` | Optional | Both | Key for /api/debug/lastlog endpoint |
 | `REPL_ID` | Auto | Replit | Auto-set by Replit |
 | `NODE_ENV` | Optional | Both | `production` or `development` |
@@ -359,7 +359,7 @@ ALTER TABLE contacts
 | `/api/contacts/:id` | GET | Yes | Contact details |
 | `/api/settings` | GET/POST | Yes | User settings |
 
-*API Key required only when "API Settings" is enabled in Settings UI.
+*API Key required when API_INTAKE_KEY env var is set (environment-enforced, no UI dependency).
 
 ---
 
@@ -409,7 +409,7 @@ This design ensures security is enforced at the environment level, independent o
 ```bash
 POST /api/intake
 Content-Type: application/json
-X-API-Key: your-api-key  # Only if API Settings enabled
+X-API-Key: your-api-key  # Required when API_INTAKE_KEY is set
 
 {
   "email": "john@example.com",
@@ -483,7 +483,7 @@ At least ONE of these is required:
 
 ### Curl Examples
 
-**With API Key (API Settings enabled):**
+**With API Key (when API_INTAKE_KEY env var is set):**
 ```bash
 curl -X POST https://your-app.railway.app/api/intake \
   -H "Content-Type: application/json" \
@@ -496,7 +496,7 @@ curl -X POST https://your-app.railway.app/api/intake \
   }'
 ```
 
-**Without API Key (API Settings disabled):**
+**Without API Key (only works when API_INTAKE_KEY env var is NOT set):**
 ```bash
 curl -X POST https://your-app.railway.app/api/intake \
   -H "Content-Type: application/json" \

@@ -152,24 +152,35 @@ export async function registerRoutes(
   });
 
   // Final verification endpoint - comprehensive system check
-  // Tests health, ready, intake auth enforcement, and DB write
+  // Tests health, ready, intake auth enforcement (with real HTTP calls), and DB write
   // Cleans up only test records it creates
   app.get("/api/finalcheck", async (req: Request, res: Response) => {
     const testId = `__finalcheck_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     const results: Record<string, { pass: boolean; detail?: string }> = {};
+    let createdCompanyId: string | null = null;
     let createdContactId: string | null = null;
     let createdJobId: string | null = null;
     
     const configuredApiKey = process.env.API_INTAKE_KEY || process.env.API_KEY;
     
-    // Test 1: Health check
+    // Determine base URL for self-calls
+    const protocol = req.protocol;
+    const host = req.get('host');
+    const baseUrl = `${protocol}://${host}`;
+    
+    // Test 1: Health check (real call)
     try {
-      results.health = { pass: true, detail: "alive" };
+      const healthRes = await fetch(`${baseUrl}/api/health`);
+      const healthData = await healthRes.json() as any;
+      results.health = { 
+        pass: healthRes.ok && healthData.ok, 
+        detail: healthData.status || "alive" 
+      };
     } catch (e: any) {
       results.health = { pass: false, detail: e.message };
     }
     
-    // Test 2: Ready check
+    // Test 2: Ready check (real call)
     try {
       const deps = await checkDependencies();
       results.ready = { pass: deps.ready, detail: deps.ready ? "ready" : "not_ready" };
@@ -177,75 +188,130 @@ export async function registerRoutes(
       results.ready = { pass: false, detail: e.message };
     }
     
-    // Test 3: Intake auth enforcement (missing key)
+    // Test 3: Intake auth enforcement - actually call the endpoint
+    // Use example.com which is reserved by RFC 2606 for documentation/testing
+    const testEmail1 = `finalcheck_nokey_${testId}@example.com`;
+    const testEmail2 = `finalcheck_withkey_${testId}@example.com`;
+    
     if (configuredApiKey) {
-      // Simulate missing key - should be blocked by validateApiKey
-      results.intake_no_key = { 
-        pass: true, 
-        detail: "API_INTAKE_KEY configured - requests without X-API-Key will get 401" 
-      };
+      // Test 3a: Call without key - should get 401
+      try {
+        const noKeyRes = await fetch(`${baseUrl}/api/intake`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: testEmail1 }),
+        });
+        if (noKeyRes.status === 401) {
+          results.intake_no_key = { pass: true, detail: "401 returned (correct)" };
+        } else {
+          results.intake_no_key = { pass: false, detail: `Expected 401, got ${noKeyRes.status}` };
+        }
+      } catch (e: any) {
+        results.intake_no_key = { pass: false, detail: e.message };
+      }
+      
+      // Test 3b: Call with correct key - should succeed
+      try {
+        const withKeyRes = await fetch(`${baseUrl}/api/intake`, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'X-API-Key': configuredApiKey,
+          },
+          body: JSON.stringify({ email: testEmail2 }),
+        });
+        const withKeyData = await withKeyRes.json() as any;
+        if (withKeyRes.ok && withKeyData.success) {
+          results.intake_with_key = { 
+            pass: true, 
+            detail: `200 success, contactId=${withKeyData.contactId}` 
+          };
+          // Track for cleanup
+          createdContactId = withKeyData.contactId;
+          createdJobId = withKeyData.jobId;
+        } else {
+          results.intake_with_key = { 
+            pass: false, 
+            detail: `Expected 200 success, got ${withKeyRes.status}: ${JSON.stringify(withKeyData)}` 
+          };
+        }
+      } catch (e: any) {
+        results.intake_with_key = { pass: false, detail: e.message };
+      }
     } else {
-      results.intake_no_key = { 
-        pass: true, 
-        detail: "API_INTAKE_KEY not set - endpoint is open (no auth required)" 
-      };
+      // No API key configured - endpoint should be open
+      try {
+        const openRes = await fetch(`${baseUrl}/api/intake`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: testEmail1 }),
+        });
+        const openData = await openRes.json() as any;
+        if (openRes.ok && openData.success) {
+          results.intake_no_key = { 
+            pass: true, 
+            detail: `Endpoint open (no API_INTAKE_KEY), contactId=${openData.contactId}` 
+          };
+          createdContactId = openData.contactId;
+          createdJobId = openData.jobId;
+        } else {
+          results.intake_no_key = { 
+            pass: false, 
+            detail: `Expected 200 success, got ${openRes.status}` 
+          };
+        }
+      } catch (e: any) {
+        results.intake_no_key = { pass: false, detail: e.message };
+      }
     }
     
-    // Test 4: DB write test via intake simulation
+    // Test 4: DB write test (direct storage call to verify DB access)
     try {
-      const testEmail = `${testId}@__finalcheck__.invalid`;
-      
-      // Create test company
       const testCompany = await storage.createCompany({
         name: `__FINALCHECK__ ${testId}`,
         domain: `${testId}.finalcheck.invalid`,
       });
-      
-      // Create test contact
-      const testContact = await storage.createContact({
-        email: testEmail,
-        firstName: "__FinalCheck__",
-        lastName: testId,
-        companyId: testCompany.id,
-        phone: null,
-        title: null,
-        city: null,
-        linkedinUrl: null,
-      });
-      createdContactId = testContact.id;
-      
-      // Create test job
-      const testJob = await storage.createBulkJob({
-        name: `__FINALCHECK__ ${testId}`,
-        sourceFormat: "finalcheck",
-        totalRecords: 1,
-        status: "complete",
-      });
-      createdJobId = testJob.id;
+      createdCompanyId = testCompany.id;
       
       results.db_write = { 
         pass: true, 
-        detail: `contactId=${createdContactId}, jobId=${createdJobId}` 
+        detail: `companyId=${createdCompanyId}` 
       };
-      
-      // Cleanup: delete test records
-      try {
-        if (createdJobId) {
-          await db.delete(bulkJobItems).where(eq(bulkJobItems.bulkJobId, createdJobId));
-          await db.delete(bulkJobs).where(eq(bulkJobs.id, createdJobId));
-        }
-        if (createdContactId) {
-          await db.delete(contacts).where(eq(contacts.id, createdContactId));
-        }
-        if (testCompany.id) {
-          await db.delete(companies).where(eq(companies.id, testCompany.id));
-        }
-        results.cleanup = { pass: true, detail: "test records deleted" };
-      } catch (e: any) {
-        results.cleanup = { pass: false, detail: e.message };
-      }
     } catch (e: any) {
       results.db_write = { pass: false, detail: e.message };
+    }
+    
+    // Cleanup: delete test records (robust - track each deletion)
+    const cleanupDetails: string[] = [];
+    try {
+      // Delete job items and jobs first (foreign key constraints)
+      if (createdJobId) {
+        await db.delete(bulkJobItems).where(eq(bulkJobItems.bulkJobId, createdJobId));
+        await db.delete(bulkJobs).where(eq(bulkJobs.id, createdJobId));
+        cleanupDetails.push(`job=${createdJobId}`);
+      }
+      // Delete contacts
+      if (createdContactId) {
+        await db.delete(contacts).where(eq(contacts.id, createdContactId));
+        cleanupDetails.push(`contact=${createdContactId}`);
+      }
+      // Delete test company we created directly
+      if (createdCompanyId) {
+        await db.delete(companies).where(eq(companies.id, createdCompanyId));
+        cleanupDetails.push(`company=${createdCompanyId}`);
+      }
+      // Also clean up any company created via intake (by test email domain)
+      await db.delete(companies).where(eq(companies.domain, `${testId}.finalcheck.invalid`));
+      
+      results.cleanup = { 
+        pass: true, 
+        detail: cleanupDetails.length > 0 ? `deleted: ${cleanupDetails.join(', ')}` : "no records to clean" 
+      };
+    } catch (e: any) {
+      results.cleanup = { 
+        pass: false, 
+        detail: `${e.message}. Partial cleanup: ${cleanupDetails.join(', ')}` 
+      };
     }
     
     // Calculate overall pass
