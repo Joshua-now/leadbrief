@@ -42,6 +42,14 @@ export const contacts = pgTable("contacts", {
   instantlyLeadId: text("instantly_lead_id"),
   instantlyPushedAt: timestamp("instantly_pushed_at"),
   instantlyCampaignId: text("instantly_campaign_id"),
+  // Normalized fields for deduplication (partial unique indexes added via SQL)
+  emailNorm: text("email_norm"),
+  domainNorm: text("domain_norm"),
+  phoneNorm: text("phone_norm"),
+  // Tracking/merge fields
+  sourceHash: text("source_hash"),
+  sources: jsonb("sources").$type<string[]>().default([]),
+  lastSeenAt: timestamp("last_seen_at").defaultNow(),
 });
 
 export const bulkJobs = pgTable("bulk_jobs", {
