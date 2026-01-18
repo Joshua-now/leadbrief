@@ -87,8 +87,8 @@ export default function ContactsPage() {
   }
 
   return (
-    <div className="flex-1 overflow-auto p-6">
-      <div className="mx-auto max-w-5xl space-y-6">
+    <div className="h-full min-h-0 overflow-y-auto p-6">
+      <div className="mx-auto max-w-5xl space-y-6 pb-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Contacts</h1>
