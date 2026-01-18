@@ -905,6 +905,7 @@ export async function registerRoutes(
   });
 
   app.post("/api/settings", isAuthenticated, async (req: Request, res: Response) => {
+    console.log("[Settings] POST /api/settings received, body:", JSON.stringify(req.body));
     try {
       const { webhookUrl, apiKeyEnabled, emailNotifications, autoRetryEnabled, maxRetries } = req.body;
       const appSettings = await storage.upsertSettings({
