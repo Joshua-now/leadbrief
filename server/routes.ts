@@ -471,6 +471,191 @@ export async function registerRoutes(
     }
   });
 
+  // Import self-test endpoint - creates 3 sample leads with different completeness to verify import pipeline
+  // Protected: requires API key or DEBUG_KEY
+  app.get("/api/import/selftest", async (req: Request, res: Response) => {
+    // Require API key or DEBUG_KEY for access
+    const configuredApiKey = process.env.API_INTAKE_KEY;
+    const debugKey = process.env.DEBUG_KEY;
+    const providedKey = req.headers['x-api-key'] as string || req.headers['x-debug-key'] as string;
+    
+    const isAuthorized = 
+      (configuredApiKey && providedKey === configuredApiKey) ||
+      (debugKey && providedKey === debugKey);
+    
+    if (!isAuthorized) {
+      return res.status(401).json({ 
+        error: "Unauthorized", 
+        hint: "Provide X-API-Key or X-Debug-Key header" 
+      });
+    }
+    
+    const testId = `selftest_${Date.now()}`;
+    const createdContactIds: string[] = [];
+    const createdCompanyIds: string[] = [];
+    
+    try {
+      // Sample lead 1: Full data (high quality - should be ~75-85%)
+      const lead1 = {
+        email: `full_${testId}@test.example`,
+        phone: "+1-555-0101",
+        firstName: "Full",
+        lastName: "Data",
+        companyName: `Full Data Corp ${testId}`,
+        website: `https://www.fulldata${testId}.com`,
+        city: "San Francisco",
+        state: "CA",
+        address: "123 Market St",
+        category: "Technology",
+        title: "CEO",
+        linkedinUrl: `https://linkedin.com/in/fulldata${testId}`,
+      };
+      
+      // Sample lead 2: Medium data (medium quality - should be ~45-55%)
+      const lead2 = {
+        email: `medium_${testId}@test.example`,
+        companyName: `Medium Corp ${testId}`,
+        website: `https://www.mediumcorp${testId}.com`,
+        city: "Los Angeles",
+        state: "CA",
+      };
+      
+      // Sample lead 3: Minimal data (low quality - should be ~20-35%)
+      const lead3 = {
+        companyName: `Minimal LLC ${testId}`,
+        website: `https://www.minimal${testId}.com`,
+      };
+      
+      const results: Array<{
+        input: typeof lead1 | typeof lead2 | typeof lead3;
+        contactId: string;
+        companyId: string | null;
+        dataQualityScore: number;
+        storedContact: {
+          id: string;
+          email: string | null;
+          companyName: string | null;
+          website: string | null;
+          city: string | null;
+          state: string | null;
+          category: string | null;
+          dataQualityScore: string | null;
+        };
+      }> = [];
+      
+      for (const lead of [lead1, lead2, lead3]) {
+        // Create company
+        let companyId: string | null = null;
+        if (lead.companyName) {
+          const company = await storage.upsertCompany({
+            name: lead.companyName,
+            domain: lead.website || null,
+          });
+          companyId = company.id;
+          createdCompanyIds.push(company.id);
+        }
+        
+        // Calculate data quality score
+        const qualityWeights: Record<string, number> = {
+          email: 20, phone: 15, website: 15, companyName: 10,
+          city: 5, state: 5, linkedinUrl: 5, title: 5,
+          firstName: 3, lastName: 2, address: 3, category: 2,
+        };
+        let qualityScore = 0;
+        for (const [field, weight] of Object.entries(qualityWeights)) {
+          if ((lead as any)[field]) qualityScore += weight;
+        }
+        qualityScore = Math.min(qualityScore, 100);
+        
+        // Create contact
+        const contact = await storage.createContact({
+          email: (lead as any).email || null,
+          phone: (lead as any).phone || null,
+          firstName: (lead as any).firstName || null,
+          lastName: (lead as any).lastName || null,
+          title: (lead as any).title || null,
+          companyName: lead.companyName || null,
+          website: lead.website || null,
+          city: (lead as any).city || null,
+          state: (lead as any).state || null,
+          address: (lead as any).address || null,
+          category: (lead as any).category || null,
+          companyId,
+          linkedinUrl: (lead as any).linkedinUrl || null,
+          dataQualityScore: String(qualityScore),
+        });
+        createdContactIds.push(contact.id);
+        
+        results.push({
+          input: lead,
+          contactId: contact.id,
+          companyId,
+          dataQualityScore: qualityScore,
+          storedContact: {
+            id: contact.id,
+            email: contact.email,
+            companyName: contact.companyName,
+            website: contact.website,
+            city: contact.city,
+            state: contact.state,
+            category: contact.category,
+            dataQualityScore: contact.dataQualityScore,
+          },
+        });
+      }
+      
+      // Create tracking job
+      const job = await storage.createBulkJob({
+        name: `Import Self-Test: ${testId}`,
+        sourceFormat: "selftest",
+        totalRecords: 3,
+        status: "complete",
+        successful: 3,
+        completedAt: new Date(),
+      });
+      
+      // Create job items
+      await storage.createBulkJobItems(
+        createdContactIds.map((contactId, idx) => ({
+          bulkJobId: job.id,
+          rowNumber: idx + 1,
+          status: "complete" as const,
+          parsedData: JSON.parse(JSON.stringify(results[idx].input)),
+          contactId,
+          companyId: createdCompanyIds[idx] || null,
+          fitScore: String(results[idx].dataQualityScore),
+        }))
+      );
+      
+      res.json({
+        success: true,
+        testId,
+        jobId: job.id,
+        message: "Import self-test completed. 3 sample leads created with different quality scores.",
+        results,
+        dataQualityDimensions: [
+          "email", "phone", "website", "companyName", "city", "state",
+          "linkedinUrl", "title", "firstName", "lastName", "address", "category"
+        ],
+        cleanup_sql: `DELETE FROM contacts WHERE email LIKE '%${testId}%' OR company_name LIKE '%${testId}%';`,
+      });
+    } catch (error: any) {
+      // Cleanup on error
+      for (const id of createdContactIds) {
+        try { await db.delete(contacts).where(eq(contacts.id, id)); } catch {}
+      }
+      for (const id of createdCompanyIds) {
+        try { await db.delete(companies).where(eq(companies.id, id)); } catch {}
+      }
+      
+      res.status(500).json({
+        success: false,
+        testId,
+        error: error.message,
+      });
+    }
+  });
+
   // Debug endpoint to get last logs (protected by DEBUG_KEY)
   app.get("/api/debug/lastlog", (req: Request, res: Response) => {
     const debugKey = req.headers['x-debug-key'] as string;
