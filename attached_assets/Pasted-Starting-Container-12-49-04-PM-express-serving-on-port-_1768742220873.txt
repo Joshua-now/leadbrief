@@ -1,0 +1,76 @@
+Starting Container
+12:49:04 PM [express] serving on port 8080
+)
+[HealthMonitor] Started health monitoring
+[Shutdown] Graceful shutdown handlers registered
+[Auth] REPL_ID: NO
+[Auth] SUPABASE_URL: YES
+[Auth] Environment: Railway
+[Auth] SUPABASE_ANON_KEY: YES
+npm warn config production Use `--omit=dev` instead.
+[Supabase Server] isConfigured: true (url: true, key: true)
+[Env] NODE_ENV: production
+[Auth] Active provider: supabase
+[Env] Vars: REPL_ID=NO, REPLIT_DEPLOYMENT=NO, SUPABASE_URL=YES, SUPABASE_ANON_KEY=present(...NRkH), SESSION_SECRET=present(...5d6
+> rest-express@1.0.0 start
+[Auth] Setting up Supabase Auth routes (stateless JWT-only)
+[DB] DATABASE_URL present: true
+> NODE_ENV=production node dist/index.cjs
+), SUPABASE_SERVICE_ROLE_KEY=present(...pEYO), DATABASE_URL=present(...gres), APP_URL=YES, API_KEY=NO, DEBUG_KEY=present(...2d1
+[DB] DATABASE_URL starts with: postgresql://postgres.ronwuihuduazbasbjlbd:aImv3Vr...
+[2026-01-18T12:49:04.063Z] [INFO] Crash handlers registered
+[Static] Serving static files from: /app/dist/public
+[DB] Using Supabase pooler with connection string, ssl: true
+[Static] Directory exists: true
+[2026-01-18T12:49:04.062Z] [INFO] Log file initialized {"path":"/tmp/app.log"}
+[2026-01-18T12:49:04.063Z] [INFO] Application starting
+[2026-01-18T12:49:04.063Z] [INFO] Setting up crash handlers
+[Env] Environment: Railway/External
+[HealthMonitor] System unhealthy: {"database":{"healthy":true,"latencyMs":73},"memory":{"used":29,"total":30,"percentUsed":96,"isHealthy":false},"processor":{"healthy":true,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+12:50:11 PM [express] GET /api/auth/config 200 in 1ms :: {"provider":"supabase","isEnabled":true,"supabaseConfigured":true,"supabase":{"url":"https://ronwuihuduazbasbjlbd.supabase.co","anonKey":"sb_publishable_Bu9tB5qh6P277hp-ixJyVA_EsctNRkH"}}
+[Auth] /api/auth/user request, provider: supabase
+[Supabase Server] Creating Supabase client
+[Supabase Server] verifyToken success for user: 731baced-7680-4428-8d41-16c147197e17
+12:50:12 PM [express] GET /api/auth/user 200 in 256ms :: {"id":"731baced-7680-4428-8d41-16c147197e17","email":"jbbrown09@gmail.com","firstName":null,"lastName":null,"profileImageUrl":null,"createdAt":"2026-01-18T12:50:12.460Z","updatedAt":"2026-01-18T12:50:12.460Z"}
+12:50:12 PM [express] GET /api/config/limits 304 in 1ms :: {"MAX_RECORDS":10000,"MAX_FILE_SIZE_MB":10,"MAX_EMAIL_LENGTH":254,"MAX_FIELD_LENGTH":500,"MIN_EMAIL_LENGTH":5}
+[HealthMonitor] System unhealthy: {"database":{"healthy":true,"latencyMs":40},"memory":{"used":30,"total":31,"percentUsed":96,"isHealthy":false},"processor":{"healthy":true,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+[HealthMonitor] System unhealthy: {"database":{"healthy":true,"latencyMs":49},"memory":{"used":30,"total":31,"percentUsed":95,"isHealthy":false},"processor":{"healthy":true,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+12:52:22 PM [express] GET /api/logout 302 in 2ms
+12:52:22 PM [express] GET /api/auth/config 200 in 1ms :: {"provider":"supabase","isEnabled":true,"supabaseConfigured":true,"supabase":{"url":"https://ronwuihuduazbasbjlbd.supabase.co","anonKey":"sb_publishable_Bu9tB5qh6P277hp-ixJyVA_EsctNRkH"}}
+[Auth] /api/auth/user request, provider: supabase
+[Supabase Server] verifyToken success for user: 731baced-7680-4428-8d41-16c147197e17
+12:52:22 PM [express] GET /api/auth/user 200 in 190ms :: {"id":"731baced-7680-4428-8d41-16c147197e17","email":"jbbrown09@gmail.com","firstName":null,"lastName":null,"profileImageUrl":null,"createdAt":"2026-01-18T12:50:12.460Z","updatedAt":"2026-01-18T12:52:22.592Z"}
+12:52:22 PM [express] GET /api/config/limits 304 in 1ms :: {"MAX_RECORDS":10000,"MAX_FILE_SIZE_MB":10,"MAX_EMAIL_LENGTH":254,"MAX_FIELD_LENGTH":500,"MIN_EMAIL_LENGTH":5}
+12:52:25 PM [express] GET /api/logout 302 in 1ms
+12:52:26 PM [express] GET /api/auth/config 200 in 1ms :: {"provider":"supabase","isEnabled":true,"supabaseConfigured":true,"supabase":{"url":"https://ronwuihuduazbasbjlbd.supabase.co","anonKey":"sb_publishable_Bu9tB5qh6P277hp-ixJyVA_EsctNRkH"}}
+[Auth] /api/auth/user request, provider: supabase
+[Supabase Server] verifyToken success for user: 731baced-7680-4428-8d41-16c147197e17
+12:52:26 PM [express] GET /api/auth/user 200 in 43ms :: {"id":"731baced-7680-4428-8d41-16c147197e17","email":"jbbrown09@gmail.com","firstName":null,"lastName":null,"profileImageUrl":null,"createdAt":"2026-01-18T12:50:12.460Z","updatedAt":"2026-01-18T12:52:26.183Z"}
+12:52:26 PM [express] GET /api/config/limits 304 in 0ms :: {"MAX_RECORDS":10000,"MAX_FILE_SIZE_MB":10,"MAX_EMAIL_LENGTH":254,"MAX_FIELD_LENGTH":500,"MIN_EMAIL_LENGTH":5}
+[HealthMonitor] System unhealthy: {"database":{"healthy":true,"latencyMs":54},"memory":{"used":30,"total":33,"percentUsed":92,"isHealthy":false},"processor":{"healthy":true,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+[HealthMonitor] System unhealthy: {"database":{"healthy":true,"latencyMs":4},"memory":{"used":31,"total":33,"percentUsed":93,"isHealthy":false},"processor":{"healthy":true,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+[HealthMonitor] System unhealthy: {"database":{"healthy":true,"latencyMs":57},"memory":{"used":31,"total":32,"percentUsed":95,"isHealthy":false},"processor":{"healthy":true,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+[HealthMonitor] System unhealthy: {"database":{"healthy":true,"latencyMs":35},"memory":{"used":31,"total":32,"percentUsed":97,"isHealthy":false},"processor":{"healthy":true,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+[HealthMonitor] System unhealthy: {"database":{"healthy":true,"latencyMs":39},"memory":{"used":31,"total":32,"percentUsed":96,"isHealthy":false},"processor":{"healthy":true,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+[HealthMonitor] System unhealthy: {"database":{"healthy":true,"latencyMs":35},"memory":{"used":31,"total":33,"percentUsed":95,"isHealthy":false},"processor":{"healthy":true,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+[HealthMonitor] System unhealthy: {"database":{"healthy":true,"latencyMs":4},"memory":{"used":32,"total":33,"percentUsed":97,"isHealthy":false},"processor":{"healthy":true,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+[HealthMonitor] System unhealthy: {"database":{"healthy":true,"latencyMs":39},"memory":{"used":31,"total":33,"percentUsed":96,"isHealthy":false},"processor":{"healthy":true,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+[HealthMonitor] System unhealthy: {"database":{"healthy":true,"latencyMs":42},"memory":{"used":32,"total":33,"percentUsed":97,"isHealthy":false},"processor":{"healthy":true,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+[HealthMonitor] System unhealthy: {"database":{"healthy":true,"latencyMs":50},"memory":{"used":31,"total":33,"percentUsed":96,"isHealthy":false},"processor":{"healthy":true,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+[HealthMonitor] System unhealthy: {"database":{"healthy":true,"latencyMs":47},"memory":{"used":32,"total":33,"percentUsed":97,"isHealthy":false},"processor":{"healthy":true,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+[HealthMonitor] System unhealthy: {"database":{"healthy":true,"latencyMs":5},"memory":{"used":32,"total":33,"percentUsed":95,"isHealthy":false},"processor":{"healthy":true,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+[HealthMonitor] System unhealthy: {"database":{"healthy":true,"latencyMs":45},"memory":{"used":31,"total":33,"percentUsed":95,"isHealthy":false},"processor":{"healthy":true,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+[HealthMonitor] System unhealthy: {"database":{"healthy":true,"latencyMs":42},"memory":{"used":32,"total":33,"percentUsed":96,"isHealthy":false},"processor":{"healthy":true,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+[HealthMonitor] System unhealthy: {"database":{"healthy":true,"latencyMs":45},"memory":{"used":31,"total":34,"percentUsed":92,"isHealthy":false},"processor":{"healthy":true,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+[HealthMonitor] System unhealthy: {"database":{"healthy":true,"latencyMs":37},"memory":{"used":32,"total":34,"percentUsed":93,"isHealthy":false},"processor":{"healthy":true,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+[HealthMonitor] System unhealthy: {"database":{"healthy":true,"latencyMs":4},"memory":{"used":32,"total":33,"percentUsed":95,"isHealthy":false},"processor":{"healthy":true,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+[HealthMonitor] System unhealthy: {"database":{"healthy":true,"latencyMs":48},"memory":{"used":32,"total":33,"percentUsed":96,"isHealthy":false},"processor":{"healthy":true,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+[HealthMonitor] System unhealthy: {"database":{"healthy":true,"latencyMs":47},"memory":{"used":32,"total":33,"percentUsed":95,"isHealthy":false},"processor":{"healthy":true,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+[HealthMonitor] System unhealthy: {"database":{"healthy":true,"latencyMs":48},"memory":{"used":32,"total":33,"percentUsed":97,"isHealthy":false},"processor":{"healthy":true,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+[HealthMonitor] System unhealthy: {"database":{"healthy":true,"latencyMs":53},"memory":{"used":32,"total":33,"percentUsed":95,"isHealthy":false},"processor":{"healthy":true,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+Stopping Container
+npm error path /app
+npm error command failed
+npm error signal SIGTERM
+npm error command sh -c NODE_ENV=production node dist/index.cjs
+npm error A complete log of this run can be found in: /root/.npm/_logs/2026-01-18T12_49_03_777Z-debug-0.lo

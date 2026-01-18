@@ -140,9 +140,25 @@ export async function signUpWithEmail(email: string, password: string) {
 
 export async function signOut() {
   const client = getSupabaseClient();
+  
+  // Clear Supabase session and local storage
   if (client) {
-    await client.auth.signOut();
+    try {
+      console.log('[Supabase] Signing out...');
+      await client.auth.signOut({ scope: 'global' });
+      console.log('[Supabase] Sign out complete');
+    } catch (e) {
+      console.error('[Supabase] Sign out error:', e);
+    }
   }
+  
+  // Clear any cached auth data
+  localStorage.removeItem('leadbrief-auth');
+  
+  // Reset module state so next login gets fresh config
+  supabaseClient = null;
+  
+  // Redirect to server logout to clear any server-side session
   window.location.href = '/api/logout';
 }
 

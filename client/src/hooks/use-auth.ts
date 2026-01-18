@@ -31,11 +31,19 @@ async function fetchUser(): Promise<User | null> {
 }
 
 async function logout(): Promise<void> {
-  // Clear Supabase session first (if configured), then redirect
-  const isConfigured = await ensureSupabaseConfigured();
-  if (isConfigured) {
-    await signOut();
-  } else {
+  // Clear Supabase session first (if configured), then redirect to server logout
+  try {
+    const isConfigured = await ensureSupabaseConfigured();
+    if (isConfigured) {
+      // signOut() will clear Supabase session and redirect to /api/logout
+      await signOut();
+    } else {
+      // For Replit Auth, just redirect to server logout
+      window.location.href = "/api/logout";
+    }
+  } catch (e) {
+    console.error('[Auth] Logout error:', e);
+    // Fallback: force redirect even if signOut fails
     window.location.href = "/api/logout";
   }
 }

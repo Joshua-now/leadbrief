@@ -558,19 +558,31 @@ export async function registerRoutes(
 
   // Settings endpoints (protected)
   app.get("/api/settings", isAuthenticated, async (_req: Request, res: Response) => {
+    // Default settings to return if DB fails or no settings exist
+    const defaultSettings = {
+      id: null,
+      webhookUrl: null,
+      apiKeyEnabled: false,
+      emailNotifications: false,
+      autoRetryEnabled: true,
+      maxRetries: 3,
+    };
+    
     try {
       const appSettings = await storage.getSettings();
-      res.json(appSettings || {
-        id: null,
-        webhookUrl: null,
-        apiKeyEnabled: false,
-        emailNotifications: false,
-        autoRetryEnabled: true,
-        maxRetries: 3,
-      });
-    } catch (error) {
-      console.error("Error fetching settings:", error);
-      res.status(500).json({ error: "Failed to fetch settings" });
+      res.json(appSettings || defaultSettings);
+    } catch (error: any) {
+      // Log the error for debugging but return defaults instead of failing
+      console.error("Error fetching settings:", error?.message || error);
+      
+      // If the table doesn't exist yet, return defaults gracefully
+      if (error?.message?.includes('does not exist') || error?.message?.includes('relation')) {
+        console.warn("Settings table may not exist yet, returning defaults");
+        return res.json(defaultSettings);
+      }
+      
+      // For other errors, still return defaults to not break the UI
+      res.json(defaultSettings);
     }
   });
 
