@@ -57,11 +57,8 @@ async function validateApiKey(req: Request, res: Response, next: () => void) {
     next();
   } catch (error) {
     console.error("[Intake] API key validation error:", error);
-    // On error, fail open in development, closed in production
-    if (process.env.NODE_ENV === 'production') {
-      return res.status(500).json({ error: "API key validation failed" });
-    }
-    next();
+    // Always fail closed - if we can't check settings, reject the request
+    return res.status(500).json({ error: "API key validation failed" });
   }
 }
 
