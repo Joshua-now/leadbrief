@@ -1,0 +1,110 @@
+althMonitor] System unhealthy: {"database":{"healthy":false,"latencyMs":24,"error":"Tenant or user not found"},"memory":{"used":31,"total":32,"percentUsed":96,"isHealthy":false},"processor":{"healthy":false,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+[HealthMonitor] System unhealthy: {"database":{"healthy":false,"latencyMs":23,"error":"Tenant or user not found"},"memory":{"used":30,"total":32,"percentUsed":95,"isHealthy":false},"processor":{"healthy":false,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+[HealthMonitor] System unhealthy: {"database":{"healthy":false,"latencyMs":29,"error":"Tenant or user not found"},"memory":{"used":31,"total":32,"percentUsed":96,"isHealthy":false},"processor":{"healthy":false,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+[HealthMonitor] System unhealthy: {"database":{"healthy":false,"latencyMs":23,"error":"Tenant or user not found"},"memory":{"used":31,"total":32,"percentUsed":97,"isHealthy":false},"processor":{"healthy":false,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+Starting Container
+npm warn config production Use `--omit=dev` instead.
+> rest-express@1.0.0 start
+> NODE_ENV=production node dist/index.cjs
+[DB] DATABASE_URL present: true
+[DB] DATABASE_URL starts with: postgresql://postgres.ronwuihuduazbasbjlbd:aImv3Vr...
+[DB] Using Supabase pooler with connection string, ssl: true
+[2026-01-18T11:51:22.092Z] [INFO] Log file initialized {"path":"/tmp/app.log"}
+[2026-01-18T11:51:22.103Z] [INFO] Setting up crash handlers
+[2026-01-18T11:51:22.103Z] [INFO] Crash handlers registered
+[2026-01-18T11:51:22.103Z] [INFO] Application starting
+[Env] Environment: Railway/External
+[Env] NODE_ENV: production
+[Env] Vars: REPL_ID=NO, REPLIT_DEPLOYMENT=NO, SUPABASE_URL=YES, SUPABASE_ANON_KEY=present(...NRkH), SESSION_SECRET=present(...5d6
+), SUPABASE_SERVICE_ROLE_KEY=present(...pEYO), DATABASE_URL=present(...gres), APP_URL=YES, API_KEY=NO, DEBUG_KEY=present(...2d1
+)
+[Shutdown] Graceful shutdown handlers registered
+[Auth] Environment: Railway
+[Auth] REPL_ID: NO
+[Auth] SUPABASE_URL: YES
+[Auth] SUPABASE_ANON_KEY: YES
+[Supabase Server] isConfigured: true (url: true, key: true)
+[Auth] Active provider: supabase
+[Auth] Setting up Supabase Auth routes (stateless JWT-only)
+[Static] Serving static files from: /app/dist/public
+[Static] Directory exists: true
+11:51:22 AM [express] serving on port 8080
+[HealthMonitor] Started health monitoring
+Stopping Container
+npm error path /app
+npm error command failed
+npm error signal SIGTERM
+npm error command sh -c NODE_ENV=production node dist/index.cjs
+npm error A complete log of this run can be found in: /root/.npm/_logs/2026-01-18T11_37_01_119Z-debug-0.log
+[HealthMonitor] System unhealthy: {"database":{"healthy":false,"latencyMs":105,"error":"Tenant or user not found"},"memory":{"used":28,"total":29,"percentUsed":96,"isHealthy":false},"processor":{"healthy":false,"pendingJobs":0,"processingJobs":0,"staleJobs":0},"circuitBreakers":[]}
+11:52:52 AM [express] GET /api/auth/config 304 in 3ms :: {"provider":"supabase","isEnabled":true,"supabaseConfigured":true,"supabase":{"url":"https://ronwuihuduazbasbjlbd.supabase.co","anonKey":"sb_publishable_Bu9tB5qh6P277hp-ixJyVA_EsctNRkH"}}
+[Auth] /api/auth/user request, provider: supabase
+[Supabase Server] Creating Supabase client
+[Supabase Server] verifyToken success for user: 731baced-7680-4428-8d41-16c147197e17
+[Auth] Error fetching Supabase user: error: Tenant or user not found
+    at /app/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async /app/node_modules/drizzle-orm/node-postgres/session.cjs:118:22
+    at async be.upsertUser (/app/dist/index.cjs:4:19827)
+    at async /app/dist/index.cjs:4:26821 {
+  length: 52,
+  severity: 'FATAL',
+  code: 'XX000',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: undefined,
+  line: undefined,
+  routine: undefined
+}
+11:52:53 AM [express] GET /api/auth/user 500 in 331ms :: {"message":"Failed to fetch user"}
+11:52:55 AM [express] GET /api/auth/config 304 in 2ms :: {"provider":"supabase","isEnabled":true,"supabaseConfigured":true,"supabase":{"url":"https://ronwuihuduazbasbjlbd.supabase.co","anonKey":"sb_publishable_Bu9tB5qh6P277hp-ixJyVA_EsctNRkH"}}
+[Auth] /api/auth/user request, provider: supabase
+[Supabase Server] verifyToken success for user: 731baced-7680-4428-8d41-16c147197e17
+[Auth] Error fetching Supabase user: error: Tenant or user not found
+    at /app/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async /app/node_modules/drizzle-orm/node-postgres/session.cjs:118:22
+    at async be.upsertUser (/app/dist/index.cjs:4:19827)
+    at async /app/dist/index.cjs:4:26821 {
+  length: 52,
+  severity: 'FATAL',
+  code: 'XX000',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: undefined,
+  line: undefined,
+  routine: undefined
+}
+11:52:58 AM [express] GET /api/auth/user 500 in 78ms :: {"message":"Failed to fetch user"}
+11:52:58 AM [express] GET /api/auth/config 304 in 3ms :: {"provider":"supabase","isEnabled":true,"supabaseConfigured":true,"supabase":{"url":"https://ronwuihuduazbasbjlbd.supabase.co","anonKey":"sb_publishable_Bu9tB5qh6P277hp-ixJyVA_EsctNRkH"}}
+11:52:58 AM [express] GET /api/auth/config 304 in 1ms :: {"provider":"supabase","isEnabled":true,"supabaseConfigured":true,"supabase":{"url":"https://ronwuihuduazbasbjlbd.supabase.co","anonKey":"sb_publishable_Bu9tB5qh6P277hp-ixJyVA_EsctNRkH"}}
+[Auth] /api/auth/user request, provider: supabase
+[Supabase Server] verifyToken success for user: 731baced-7680-4428-8d41-16c147197e17
+[Auth] Error fetching Supabase user: error: Tenant or user not found
+    at /app/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async /app/node_modules/drizzle-orm/node-postgres/session.cjs:118:22
+    at async be.upsertUser (/app/dist/index.cjs:4:19827)
+  routine: undefined
+}
+11:52:58 AM [express] GET /api/auth/user 500 in 69ms :: {"message":"Failed to fetch user"}
+    at async /app/dist/index.cjs:4:26821 {
+  length: 52,
