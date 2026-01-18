@@ -27,7 +27,7 @@ const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
 // Security: If API_INTAKE_KEY env var is set, require matching X-API-Key header
 // This is enforced at the environment level - no database dependency
 function validateApiKey(req: Request, res: Response, next: () => void) {
-  const configuredApiKey = process.env.API_INTAKE_KEY || process.env.API_KEY;
+  const configuredApiKey = (process.env.API_INTAKE_KEY || process.env.API_KEY || '').trim();
   
   // If no API key configured in env, endpoint is open
   if (!configuredApiKey) {
@@ -35,7 +35,7 @@ function validateApiKey(req: Request, res: Response, next: () => void) {
   }
   
   // API key is configured - require valid X-API-Key header
-  const apiKey = req.headers['x-api-key'] as string;
+  const apiKey = ((req.headers['x-api-key'] as string) || '').trim();
   
   if (!apiKey) {
     return res.status(401).json({ error: "Missing X-API-Key header" });
@@ -161,7 +161,7 @@ export async function registerRoutes(
     let createdContactId: string | null = null;
     let createdJobId: string | null = null;
     
-    const configuredApiKey = process.env.API_INTAKE_KEY || process.env.API_KEY;
+    const configuredApiKey = (process.env.API_INTAKE_KEY || process.env.API_KEY || '').trim();
     
     // Determine base URL for self-calls
     const protocol = req.protocol;
