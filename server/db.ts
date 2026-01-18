@@ -15,5 +15,23 @@ if (!dbUrl) {
   );
 }
 
-export const pool = new Pool({ connectionString: dbUrl });
+// Parse the connection string to validate and extract components
+let poolConfig: pg.PoolConfig;
+try {
+  const url = new URL(dbUrl);
+  poolConfig = {
+    host: url.hostname,
+    port: parseInt(url.port) || 5432,
+    database: url.pathname.slice(1),
+    user: url.username,
+    password: decodeURIComponent(url.password),
+    ssl: { rejectUnauthorized: false },
+  };
+  console.log("[DB] Parsed config - host:", poolConfig.host, "port:", poolConfig.port, "database:", poolConfig.database);
+} catch (e) {
+  console.error("[DB] Failed to parse DATABASE_URL:", e);
+  throw new Error("Invalid DATABASE_URL format");
+}
+
+export const pool = new Pool(poolConfig);
 export const db = drizzle(pool, { schema });
