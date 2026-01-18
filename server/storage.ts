@@ -16,7 +16,15 @@ import {
   type InsertSettings,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, and, isNotNull } from "drizzle-orm";
+import { normalizeContactFields, normalizeEmail, normalizeDomain, normalizePhone } from "./lib/normalize";
+
+export interface MergeResult {
+  contact: Contact;
+  isNew: boolean;
+  matchedBy: 'email' | 'domain' | 'phone' | null;
+  fieldsUpdated: string[];
+}
 
 export interface IStorage {
   // Companies
@@ -29,10 +37,14 @@ export interface IStorage {
   // Contacts
   getContact(id: string): Promise<Contact | undefined>;
   getContactByEmail(email: string): Promise<Contact | undefined>;
+  getContactByEmailNorm(emailNorm: string): Promise<Contact | undefined>;
+  getContactByDomainNorm(domainNorm: string): Promise<Contact | undefined>;
+  getContactByPhoneNorm(phoneNorm: string): Promise<Contact | undefined>;
   getContactByCompanyAndCity(companyName: string, city: string): Promise<Contact | undefined>;
   getContacts(limit?: number): Promise<Contact[]>;
   createContact(contact: InsertContact): Promise<Contact>;
   upsertContact(contact: InsertContact): Promise<Contact>;
+  mergeContact(contact: InsertContact, source: string): Promise<MergeResult>;
   
   // Bulk Jobs
   getBulkJob(id: string): Promise<BulkJob | undefined>;
@@ -99,6 +111,21 @@ export class DatabaseStorage implements IStorage {
     return contact || undefined;
   }
 
+  async getContactByEmailNorm(emailNorm: string): Promise<Contact | undefined> {
+    const [contact] = await db.select().from(contacts).where(eq(contacts.emailNorm, emailNorm));
+    return contact || undefined;
+  }
+
+  async getContactByDomainNorm(domainNorm: string): Promise<Contact | undefined> {
+    const [contact] = await db.select().from(contacts).where(eq(contacts.domainNorm, domainNorm));
+    return contact || undefined;
+  }
+
+  async getContactByPhoneNorm(phoneNorm: string): Promise<Contact | undefined> {
+    const [contact] = await db.select().from(contacts).where(eq(contacts.phoneNorm, phoneNorm));
+    return contact || undefined;
+  }
+
   async getContactByCompanyAndCity(companyName: string, city: string): Promise<Contact | undefined> {
     const company = await this.getCompanyByName(companyName);
     if (!company) return undefined;
@@ -137,6 +164,96 @@ export class DatabaseStorage implements IStorage {
       }
     }
     return this.createContact(contact);
+  }
+
+  async mergeContact(contact: InsertContact, source: string): Promise<MergeResult> {
+    const normalized = normalizeContactFields(contact);
+    let existing: Contact | undefined;
+    let matchedBy: 'email' | 'domain' | 'phone' | null = null;
+
+    if (normalized.emailNorm) {
+      existing = await this.getContactByEmailNorm(normalized.emailNorm);
+      if (existing) matchedBy = 'email';
+    }
+    if (!existing && normalized.domainNorm) {
+      existing = await this.getContactByDomainNorm(normalized.domainNorm);
+      if (existing) matchedBy = 'domain';
+    }
+    if (!existing && normalized.phoneNorm) {
+      existing = await this.getContactByPhoneNorm(normalized.phoneNorm);
+      if (existing) matchedBy = 'phone';
+    }
+
+    const fieldsUpdated: string[] = [];
+    const now = new Date();
+
+    if (existing) {
+      const mergedData: Partial<InsertContact> = {
+        lastSeenAt: now,
+      };
+
+      const fillIfMissing = (field: keyof InsertContact) => {
+        const existingVal = existing![field as keyof Contact];
+        const newVal = contact[field];
+        if ((!existingVal || existingVal === '') && newVal && newVal !== '') {
+          (mergedData as any)[field] = newVal;
+          fieldsUpdated.push(field);
+        }
+      };
+
+      fillIfMissing('email');
+      fillIfMissing('phone');
+      fillIfMissing('website');
+      fillIfMissing('companyName');
+      fillIfMissing('firstName');
+      fillIfMissing('lastName');
+      fillIfMissing('title');
+      fillIfMissing('city');
+      fillIfMissing('state');
+      fillIfMissing('address');
+      fillIfMissing('category');
+      fillIfMissing('linkedinUrl');
+
+      if (!existing.emailNorm && normalized.emailNorm) {
+        mergedData.emailNorm = normalized.emailNorm;
+      }
+      if (!existing.domainNorm && normalized.domainNorm) {
+        mergedData.domainNorm = normalized.domainNorm;
+      }
+      if (!existing.phoneNorm && normalized.phoneNorm) {
+        mergedData.phoneNorm = normalized.phoneNorm;
+      }
+      if (!existing.sourceHash && normalized.sourceHash) {
+        mergedData.sourceHash = normalized.sourceHash;
+      }
+
+      const existingSources: string[] = (existing.sources as string[]) || [];
+      if (!existingSources.includes(source)) {
+        mergedData.sources = [...existingSources, source];
+      }
+
+      const [updated] = await db
+        .update(contacts)
+        .set(mergedData)
+        .where(eq(contacts.id, existing.id))
+        .returning();
+
+      return { contact: updated, isNew: false, matchedBy, fieldsUpdated };
+    } else {
+      const newContact: InsertContact = {
+        ...contact,
+        email: contact.email?.toLowerCase(),
+        emailNorm: normalized.emailNorm,
+        domainNorm: normalized.domainNorm,
+        phoneNorm: normalized.phoneNorm,
+        sourceHash: normalized.sourceHash,
+        sources: [source],
+        lastSeenAt: now,
+      };
+
+      const [created] = await db.insert(contacts).values(newContact).returning();
+      return { contact: created, isNew: true, matchedBy: null, fieldsUpdated: [] };
+    }
   }
 
   // Bulk Jobs
