@@ -144,25 +144,34 @@ export default function SettingsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Key className="h-5 w-5" />
-              Webhook Configuration
+              <Shield className="h-5 w-5" />
+              Inbound API (External to LeadBrief)
             </CardTitle>
             <CardDescription>
-              Configure webhook URL for GoHighLevel (GHL) integration
+              Configure how external systems send leads TO LeadBrief via POST /api/intake
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="webhook-url">Webhook URL</Label>
-              <Input
-                id="webhook-url"
-                placeholder="https://your-ghl-webhook-url.com"
-                value={webhookUrl}
-                onChange={(e) => setWebhookUrl(e.target.value)}
-                data-testid="input-webhook-url"
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label>Require API Key for Inbound</Label>
+                <p className="text-xs text-muted-foreground">
+                  When enabled, inbound requests must include X-API-Key header matching API_INTAKE_KEY env var
+                </p>
+              </div>
+              <Switch
+                checked={apiKeyEnabled}
+                onCheckedChange={setApiKeyEnabled}
+                data-testid="switch-api-key"
               />
-              <p className="text-xs text-muted-foreground">
-                Enter your GHL webhook URL to receive enriched contact data
+            </div>
+            <div className="rounded-md bg-muted p-3 text-xs space-y-1">
+              <p className="font-medium">Inbound Intake Endpoint:</p>
+              <code className="text-primary">POST /api/intake</code>
+              <p className="text-muted-foreground mt-1">
+                {apiKeyEnabled 
+                  ? "Header required: X-API-Key: [your API_INTAKE_KEY]" 
+                  : "Currently open (no auth required)"}
               </p>
             </div>
           </CardContent>
@@ -171,26 +180,26 @@ export default function SettingsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Shield className="h-5 w-5" />
-              API Settings
+              <Key className="h-5 w-5" />
+              Outbound to GoHighLevel
             </CardTitle>
             <CardDescription>
-              Configure API access and security settings
+              Configure webhook URL where LeadBrief sends enriched results TO GoHighLevel
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label>API Key Authentication</Label>
-                <p className="text-xs text-muted-foreground">
-                  Require API key for intake endpoints
-                </p>
-              </div>
-              <Switch
-                checked={apiKeyEnabled}
-                onCheckedChange={setApiKeyEnabled}
-                data-testid="switch-api-key"
+            <div className="space-y-2">
+              <Label htmlFor="webhook-url">GHL Webhook URL (Outbound)</Label>
+              <Input
+                id="webhook-url"
+                placeholder="https://services.leadconnectorhq.com/hooks/..."
+                value={webhookUrl}
+                onChange={(e) => setWebhookUrl(e.target.value)}
+                data-testid="input-webhook-url"
               />
+              <p className="text-xs text-muted-foreground">
+                LeadBrief will POST enriched contact data to this URL after processing
+              </p>
             </div>
           </CardContent>
         </Card>

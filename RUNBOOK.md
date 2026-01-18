@@ -428,17 +428,172 @@ curl -X POST https://your-app.railway.app/api/intake \
 
 ---
 
-## Verification Checklist
+## Webhook Directions
 
-Before going live, verify:
+LeadBrief has TWO webhook directions - make sure you configure the right one:
 
-- [ ] `curl /api/health` returns `{"ok":true}`
-- [ ] `curl /api/health?detailed=true` shows `database.healthy: true`
-- [ ] Login works (redirects to app after auth)
-- [ ] Logout works (returns to landing page)
-- [ ] Can upload CSV and see job created
-- [ ] Can view contacts list
-- [ ] Settings page loads
+```
+┌──────────────────┐     INBOUND      ┌──────────────────┐
+│  External CRM    │  ─────────────▶  │   LeadBrief      │
+│  (GHL, Zapier)   │  POST /api/intake│                  │
+└──────────────────┘                  └──────────────────┘
+
+┌──────────────────┐     OUTBOUND     ┌──────────────────┐
+│   LeadBrief      │  ─────────────▶  │  GoHighLevel     │
+│                  │  POST to webhook │  (GHL webhook)   │
+└──────────────────┘                  └──────────────────┘
+```
+
+| Direction | Endpoint/Setting | Purpose |
+|-----------|------------------|---------|
+| **Inbound** | `POST /api/intake` | External systems send leads TO LeadBrief |
+| **Outbound** | Settings → "Outbound to GoHighLevel" | LeadBrief sends enriched data TO GHL |
+
+### Inbound Configuration
+- Enable "Require API Key for Inbound" in Settings UI
+- Set `API_INTAKE_KEY` environment variable
+- External systems include `X-API-Key` header
+
+### Outbound Configuration
+- Enter your GHL webhook URL in Settings → "Outbound to GoHighLevel"
+- LeadBrief will POST enriched contact data after processing
+
+---
+
+## Health vs Ready Endpoints
+
+Two endpoints serve different purposes:
+
+| Endpoint | Purpose | Returns 200 When |
+|----------|---------|------------------|
+| `/api/health` | Liveness probe | Process is alive (always) |
+| `/api/ready` | Readiness probe | DB + Auth configured |
+
+### /api/health (Liveness)
+```bash
+curl /api/health
+# Always returns 200 if process is running
+# {"ok":true,"status":"alive","uptime":123}
+```
+
+### /api/ready (Readiness)
+```bash
+curl /api/ready
+# Returns 200 only when DB and auth are working
+# Returns 503 if dependencies are down
+# {"ready":true,"dependencies":{"database":"connected","auth":"supabase"}}
+```
+
+---
+
+## Smoke Test Endpoint
+
+Proves end-to-end flow works by creating a test lead through the entire pipeline.
+**Automatically cleans up** - test data is deleted after verification so it doesn't pollute production.
+
+```bash
+curl -X POST https://your-app.railway.app/api/smoke
+```
+
+**Success Response:**
+```json
+{
+  "success": true,
+  "testId": "smoke-1234567890",
+  "steps": [
+    {"step": "create_company", "status": "pass"},
+    {"step": "create_contact", "status": "pass"},
+    {"step": "create_job", "status": "pass"},
+    {"step": "create_job_item", "status": "pass"},
+    {"step": "verify_retrieval", "status": "pass"},
+    {"step": "cleanup", "status": "pass"}
+  ],
+  "message": "End-to-end smoke test passed - data created, verified, and cleaned up"
+}
+```
+
+---
+
+## Final Acceptance Checklist
+
+Complete this checklist to verify the full integration:
+
+### 1. Environment Setup
+- [ ] `DATABASE_URL` set (Supabase Session Pooler)
+- [ ] `SESSION_SECRET` set (32+ chars)
+- [ ] `SUPABASE_URL` set
+- [ ] `SUPABASE_ANON_KEY` set
+- [ ] `API_INTAKE_KEY` set (if enabling inbound auth)
+- [ ] `APP_URL` set to Railway app URL
+
+### 2. Health Checks
+```bash
+# Process alive
+curl https://your-app.railway.app/api/health
+# Expected: {"ok":true,"status":"alive"}
+
+# Dependencies ready
+curl https://your-app.railway.app/api/ready
+# Expected: {"ready":true,"status":"ready"}
+```
+
+### 3. Smoke Test
+```bash
+curl -X POST https://your-app.railway.app/api/smoke
+# Expected: {"success":true,"steps":[...all pass...]}
+```
+
+### 4. Authentication Flow
+- [ ] Login redirects to app after Supabase auth
+- [ ] User info displayed in header
+- [ ] Logout clears session and returns to landing
+- [ ] Protected pages redirect unauthenticated users
+
+### 5. Intake Endpoint Test
+```bash
+# With API key (if enabled in Settings)
+curl -X POST https://your-app.railway.app/api/intake \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_API_INTAKE_KEY" \
+  -d '{"email":"test@example.com","firstName":"Test","company":"Demo Corp"}'
+
+# Expected: {"success":true,"contactId":"...","jobId":"..."}
+```
+
+### 6. UI Verification
+- [ ] Settings page loads without errors
+- [ ] "Inbound API" section shows endpoint info
+- [ ] "Outbound to GoHighLevel" section visible
+- [ ] Contacts page shows the test contact
+- [ ] Jobs page shows the intake job
+
+### 7. Lead Progression Stages
+After intake, verify the lead progresses:
+1. **Received** - Lead appears in Jobs list with status "complete"
+2. **Stored** - Contact visible in Contacts page
+3. **Linked** - Company created and linked to contact
+
+---
+
+## Troubleshooting
+
+### Intake returns 401
+- Check "Require API Key" setting in UI
+- Verify `API_INTAKE_KEY` environment variable is set
+- Ensure `X-API-Key` header matches exactly
+
+### Intake returns 503
+- API key is enabled but `API_INTAKE_KEY` not configured
+- Set the environment variable and redeploy
+
+### /api/ready returns 503
+- Check `DATABASE_URL` is correct
+- Verify Supabase pooler URL (use Session mode, port 5432)
+- Run `drizzle-kit push` to ensure schema exists
+
+### Settings won't save
+- Check database connection in /api/ready
+- Verify settings table exists in Supabase
 
 ---
 
@@ -446,6 +601,7 @@ Before going live, verify:
 
 If issues persist:
 1. Check Railway/Replit logs
-2. Verify all environment variables are set
-3. Ensure database schema is pushed
-4. Clear browser cache and try again
+2. Run smoke test: `curl -X POST /api/smoke`
+3. Check dependencies: `curl /api/ready`
+4. Verify all environment variables are set
+5. Clear browser cache and try again

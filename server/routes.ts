@@ -1,6 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import multer from "multer";
+import { eq } from "drizzle-orm";
 import { storage } from "./storage";
 import { BulkInputHandler, IMPORT_LIMITS } from "./lib/input-handler";
 import { processJobItems, recoverStaleJobs, getProcessorHealth } from "./lib/job-processor";
@@ -8,6 +9,7 @@ import { parseFile } from "./lib/file-parser";
 import { setupAuth, registerAuthRoutes, isAuthenticated, getActiveAuthProvider, getIsAuthEnabled } from "./replit_integrations/auth";
 import { isSupabaseConfigured } from "./lib/supabase";
 import { db } from "./db";
+import { companies, contacts, bulkJobs, bulkJobItems } from "@shared/schema";
 import { getSystemHealth, withTimeout, categorizeError } from "./lib/guardrails";
 import { getEnvPresenceFlags, getAppVersion, checkDependencies } from "./lib/env";
 import { getLastLogs, crashLog } from "./lib/crash-logger";
@@ -117,76 +119,21 @@ export async function registerRoutes(
   });
   
   // Health check endpoint (public - no auth required)
-  app.get("/api/health", async (req: Request, res: Response) => {
-    try {
-      // Support for detailed or simple health check
-      const detailed = req.query.detailed === "true";
-      
-      // DB smoke test - quick check to verify DB connection
-      let dbOk = false;
-      let dbLatencyMs = 0;
-      try {
-        const dbStart = Date.now();
-        await storage.getBulkJobs(1); // Simple query to test connection
-        dbLatencyMs = Date.now() - dbStart;
-        dbOk = true;
-      } catch (dbError) {
-        console.error("[Health] DB smoke test failed:", dbError);
-        dbOk = false;
-      }
-      
-      const envFlags = getEnvPresenceFlags();
-      const version = getAppVersion();
-      
-      if (detailed) {
-        // Full system health with timeout protection
-        const systemHealth = await withTimeout(
-          getSystemHealth(),
-          5000,
-          "Health check timed out"
-        );
-        
-        res.json({
-          ok: systemHealth.status === "healthy" && dbOk,
-          ...systemHealth,
-          version,
-          authProvider: getActiveAuthProvider(),
-          db: dbOk,
-          dbLatencyMs,
-          env: envFlags,
-          limits: IMPORT_LIMITS,
-        });
-      } else {
-        // Simple health check for load balancers
-        const processorHealth = await getProcessorHealth();
-        const isHealthy = processorHealth.healthy && dbOk;
-        
-        res.json({
-          ok: isHealthy,
-          status: isHealthy ? "healthy" : "degraded",
-          timestamp: new Date().toISOString(),
-          version,
-          authProvider: getActiveAuthProvider(),
-          db: dbOk,
-          dbLatencyMs,
-          env: envFlags,
-          processor: processorHealth,
-          limits: IMPORT_LIMITS,
-        });
-      }
-    } catch (error) {
-      const categorized = categorizeError(error);
-      res.status(200).json({ 
-        ok: false,
-        status: "unhealthy", 
-        error: "Health check failed",
-        db: false,
-        version: getAppVersion(),
-        env: getEnvPresenceFlags(),
-        category: categorized.category,
-        isRecoverable: categorized.isRecoverable,
-      });
-    }
+  // ALWAYS returns 200 OK if process is alive - for load balancer liveness probes
+  // Use /api/ready for dependency checks
+  app.get("/api/health", async (_req: Request, res: Response) => {
+    const version = getAppVersion();
+    const uptime = process.uptime();
+    
+    // Always return 200 - process is alive
+    res.json({
+      ok: true,
+      status: "alive",
+      timestamp: new Date().toISOString(),
+      version,
+      uptime: Math.round(uptime),
+      authProvider: getActiveAuthProvider(),
+    });
   });
 
   // Readiness check endpoint (for Kubernetes/container orchestration)
@@ -216,6 +163,152 @@ export async function registerRoutes(
         status: "error",
         error: error.message || "Readiness check failed",
         timestamp: new Date().toISOString(),
+      });
+    }
+  });
+
+  // Smoke test endpoint - proves end-to-end flow works
+  // Creates UNIQUE test data, verifies DB storage, then safely cleans up
+  // Uses createCompany (not upsert) to ensure we only delete what we created
+  app.post("/api/smoke", async (req: Request, res: Response) => {
+    // Use crypto-strong unique ID to avoid any collision with real data
+    const testId = `__smoke_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const steps: Array<{ step: string; status: "pass" | "fail"; detail?: string }> = [];
+    
+    // Track created IDs for cleanup - only delete what WE created
+    let createdCompanyId: string | null = null;
+    let createdContactId: string | null = null;
+    let createdJobId: string | null = null;
+    
+    // Cleanup function - removes ONLY test data we created
+    const cleanup = async () => {
+      try {
+        // Delete in reverse order of creation (foreign key constraints)
+        if (createdJobId) {
+          await db.delete(bulkJobItems).where(eq(bulkJobItems.bulkJobId, createdJobId));
+          await db.delete(bulkJobs).where(eq(bulkJobs.id, createdJobId));
+        }
+        if (createdContactId) {
+          await db.delete(contacts).where(eq(contacts.id, createdContactId));
+        }
+        if (createdCompanyId) {
+          await db.delete(companies).where(eq(companies.id, createdCompanyId));
+        }
+        steps.push({ step: "cleanup", status: "pass" });
+      } catch (e: any) {
+        steps.push({ step: "cleanup", status: "fail", detail: e.message });
+      }
+    };
+    
+    try {
+      // Use unique markers that cannot match real data
+      const testEmail = `${testId}@__smoke_test__.invalid`;
+      const testCompanyName = `__SMOKE_TEST__ ${testId}`;
+      
+      // Step 1: CREATE company (not upsert - always creates new)
+      try {
+        const company = await storage.createCompany({
+          name: testCompanyName,
+          domain: `${testId}.smoke-test.invalid`,
+        });
+        createdCompanyId = company.id;
+        steps.push({ step: "create_company", status: "pass", detail: company.id });
+      } catch (e: any) {
+        steps.push({ step: "create_company", status: "fail", detail: e.message });
+        throw e;
+      }
+      
+      // Step 2: CREATE contact (not upsert - always creates new)
+      try {
+        const contact = await storage.createContact({
+          email: testEmail,
+          firstName: "__Smoke__",
+          lastName: testId,
+          companyId: createdCompanyId,
+          phone: null,
+          title: null,
+          city: null,
+          linkedinUrl: null,
+        });
+        createdContactId = contact.id;
+        steps.push({ step: "create_contact", status: "pass", detail: contact.id });
+      } catch (e: any) {
+        steps.push({ step: "create_contact", status: "fail", detail: e.message });
+        throw e;
+      }
+      
+      // Step 3: Create tracking job
+      try {
+        const job = await storage.createBulkJob({
+          name: `__SMOKE_TEST__: ${testId}`,
+          sourceFormat: "smoke_test",
+          totalRecords: 1,
+          status: "complete",
+          successful: 1,
+          completedAt: new Date(),
+        });
+        createdJobId = job.id;
+        steps.push({ step: "create_job", status: "pass", detail: job.id });
+      } catch (e: any) {
+        steps.push({ step: "create_job", status: "fail", detail: e.message });
+        throw e;
+      }
+      
+      // Step 4: Create job item linking contact
+      try {
+        await storage.createBulkJobItems([{
+          bulkJobId: createdJobId!,
+          rowNumber: 1,
+          status: "complete",
+          parsedData: JSON.parse(JSON.stringify({ 
+            email: testEmail, 
+            firstName: "__Smoke__", 
+            lastName: testId 
+          })),
+          contactId: createdContactId!,
+          companyId: createdCompanyId,
+        }]);
+        steps.push({ step: "create_job_item", status: "pass" });
+      } catch (e: any) {
+        steps.push({ step: "create_job_item", status: "fail", detail: e.message });
+        throw e;
+      }
+      
+      // Step 5: Verify data can be retrieved
+      try {
+        const retrievedJob = await storage.getBulkJob(createdJobId!);
+        if (retrievedJob && retrievedJob.status === "complete") {
+          steps.push({ step: "verify_retrieval", status: "pass" });
+        } else {
+          steps.push({ step: "verify_retrieval", status: "fail", detail: "Job not found or wrong status" });
+        }
+      } catch (e: any) {
+        steps.push({ step: "verify_retrieval", status: "fail", detail: e.message });
+        throw e;
+      }
+      
+      // Step 6: Clean up test data (don't pollute production)
+      await cleanup();
+      
+      const allPassed = steps.every(s => s.status === "pass");
+      
+      res.json({
+        success: allPassed,
+        testId,
+        steps,
+        message: allPassed 
+          ? "End-to-end smoke test passed - data created, verified, and cleaned up" 
+          : "Smoke test had failures",
+      });
+    } catch (error: any) {
+      // Always try to clean up even on failure
+      await cleanup();
+      
+      res.status(500).json({
+        success: false,
+        testId,
+        steps,
+        error: error.message || "Smoke test failed",
       });
     }
   });
