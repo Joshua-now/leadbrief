@@ -1,0 +1,157 @@
+Yep — this log is actually very actionable. You have two separate issues:
+
+500 “Failed to fetch settings” is a database schema mismatch (real bug)
+
+HealthMonitor “memory unhealthy” is a resource/threshold issue (deployment/config)
+
+I’ll give you the exact fix path for both, plus the quickest way to get you back to “can email today.”
+
+1) Why /api/settings is failing (the real blocker)
+
+Your server is throwing:
+
+Error fetching settings: error: column "created_at" does not exist
+hint: Perhaps you meant to reference the column "settings.updated_at".
+code 42703 (missing column)
+
+So your code (Drizzle query) expects settings.created_at, but your actual Supabase table settings does not have created_at (it likely has updated_at only, or different naming).
+
+That’s why the UI says “Failed to load settings” and you get the 500.
+
+The fix choices (pick one)
+
+Option A (recommended): Add the missing columns to match the app code
+
+Add created_at (and optionally updated_at) to the settings table
+
+This is usually the cleanest because lots of code assumes timestamps exist
+
+Option B: Change the code to match the existing schema
+
+If the table uses createdAt / updatedAt or only updated_at, change the Drizzle schema + queries.
+
+Since you want speed and stability: Option A is the fastest.
+
+1A) Fast SQL fix (run in Supabase SQL editor)
+
+Run this in Supabase → SQL Editor:
+
+ALTER TABLE public.settings
+ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();
+
+ALTER TABLE public.settings
+ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+
+
+Then (optional but good), keep updated_at current:
+
+CREATE OR REPLACE FUNCTION public.set_updated_at()
+RETURNS trigger AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_settings_updated_at ON public.settings;
+
+CREATE TRIGGER trg_settings_updated_at
+BEFORE UPDATE ON public.settings
+FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+After that, /api/settings should stop 500’ing immediately.
+
+Quick confirmation
+
+Hit:
+
+GET /api/settings
+If it returns 200, you’re good.
+
+1B) If you’d rather fix in code instead (only if SQL isn’t possible)
+
+Tell the Replit agent:
+
+“The settings table doesn’t have created_at. Either add a migration or update Drizzle schema to use updated_at only. Stop querying created_at.”
+
+But SQL editor is faster.
+
+2) HealthMonitor says “unhealthy” because memory is nearly maxed
+
+You have:
+
+memory used: 29–31
+
+total: 30–33
+
+percentUsed: 93–97%
+
+isHealthy: false
+
+That means your container has a tiny memory allotment and you’re close to the ceiling, so your readiness/health logic is (correctly) flagging it.
+
+What to do
+
+You have two levers:
+
+Option 1 (fastest): Increase memory on Railway
+
+If you can bump the Railway service size even slightly, do it. This is the fastest path.
+
+Option 2 (safer for now): Relax the health threshold
+
+If your system is otherwise working, change the “unhealthy” threshold from (example) 90% to 97–99% or change memory health to “warn” not “fail readiness”.
+
+Important distinction:
+
+/health should almost always return OK unless the process is dead
+
+/ready is allowed to fail when memory is too high
+
+Right now it looks like your monitoring may be treating memory as a hard failure too early.
+
+Also check for obvious leaks
+
+Even without a leak, Node apps can run hot in small RAM containers. But if memory keeps rising steadily over minutes, that’s a leak.
+
+3) Why you also saw “database healthy: true”
+
+Because your DB connection works — the database is reachable (latency 5–70ms).
+This is not a connectivity issue. It’s schema mismatch.
+
+4) What to tell your Replit agent (copy/paste)
+
+Paste this to them:
+
+PROMPT TO AGENT
+
+/api/settings returns 500 because the DB schema is missing settings.created_at. Postgres error 42703 “column created_at does not exist” and hint references settings.updated_at.
+
+Fix by either:
+
+adding created_at and updated_at columns to public.settings (preferred) and adding an update trigger, OR
+
+updating Drizzle schema + query to not reference created_at.
+
+After fix, verify:
+
+GET /api/settings returns 200
+
+UI loads settings successfully
+
+Also HealthMonitor flags memory unhealthy at 93–97% in small container; adjust threshold or treat as warning for liveness. Keep /health green and use /ready to gate only if truly required.
+
+5) Fastest path to “start emailing properly today”
+
+Do these in order:
+
+Run the SQL ALTER TABLE (adds created_at)
+
+Restart/redeploy the app
+
+Confirm /api/settings is 200
+
+If still “unhealthy” only due to memory, increase Railway memory or loosen threshold
+
+Then run one live test: add 1 lead → verify pipeline creates Instantly lead
