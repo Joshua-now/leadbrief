@@ -43,12 +43,18 @@ export default function SettingsPage() {
   const [autoRetryEnabled, setAutoRetryEnabled] = useState(true);
   const [maxRetries, setMaxRetries] = useState(3);
 
-  const { data: settings, isLoading, error } = useQuery<AppSettings>({
+  const { data: settings, isLoading, error, refetch } = useQuery<AppSettings>({
     queryKey: ["/api/settings"],
+    retry: 2,
+    retryDelay: 1000,
+    staleTime: 0,
   });
 
-  const { data: integrations } = useQuery<IntegrationStatus>({
+  const { data: integrations, refetch: refetchIntegrations } = useQuery<IntegrationStatus>({
     queryKey: ["/api/integrations/status"],
+    retry: 2,
+    retryDelay: 1000,
+    staleTime: 0,
   });
 
   const saveMutation = useMutation({
@@ -131,7 +137,7 @@ export default function SettingsPage() {
                   {error instanceof Error ? error.message : "Unknown error"}
                 </p>
               </div>
-              <Button variant="outline" onClick={() => window.location.reload()} data-testid="button-retry">
+              <Button variant="outline" onClick={() => { refetch(); refetchIntegrations(); }} data-testid="button-retry">
                 <RefreshCw className="mr-2 h-4 w-4" />
                 Retry
               </Button>
