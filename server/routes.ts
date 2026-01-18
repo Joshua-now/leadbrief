@@ -731,18 +731,30 @@ export async function registerRoutes(
 
       for (const lead of leads) {
         try {
-          const { email, phone, firstName, lastName, company, title, linkedinUrl, ghlContactId, leadName, companyName, websiteUrl, city } = lead;
+          // Extract all fields with comprehensive aliases
+          const { 
+            email, phone, firstName, lastName, company, title, linkedinUrl, 
+            ghlContactId, leadName, companyName, websiteUrl, website, domain, site,
+            city, state, address, formatted_address, full_address,
+            category, type, primary_category, business_type, industry,
+            place_name, business_name, business
+          } = lead;
 
-          // Handle GHL webhook format
+          // Normalize fields with fallback aliases
           const contactEmail = email?.toLowerCase()?.trim();
           const contactPhone = phone?.trim();
           const contactFirstName = (firstName || (leadName?.split(" ")[0]))?.trim();
           const contactLastName = (lastName || (leadName?.split(" ").slice(1).join(" ")))?.trim();
-          const contactCompany = (company || companyName)?.trim();
+          const contactCompany = (company || companyName || place_name || business_name || business)?.trim();
+          const contactWebsite = (websiteUrl || website || domain || site)?.trim();
           const contactCity = city?.trim();
+          const contactState = state?.trim();
+          const contactAddress = (address || formatted_address || full_address)?.trim();
+          const contactCategory = (category || type || primary_category || business_type || industry)?.trim();
 
-          if (!contactEmail && !contactPhone && !linkedinUrl) {
-            results.push({ success: false, email: contactEmail, error: "Email, phone, or LinkedIn URL required" });
+          // Allow website+company as valid identifier
+          if (!contactEmail && !contactPhone && !linkedinUrl && !contactWebsite) {
+            results.push({ success: false, email: contactEmail, error: "Email, phone, LinkedIn URL, or website required" });
             continue;
           }
 
@@ -757,19 +769,24 @@ export async function registerRoutes(
           if (contactCompany) {
             const companyRecord = await storage.upsertCompany({
               name: contactCompany.slice(0, 500),
-              domain: websiteUrl?.slice(0, 500) || null,
+              domain: contactWebsite?.slice(0, 500) || null,
             });
             companyId = companyRecord.id;
           }
 
-          // Create or update contact
+          // Create or update contact with all fields
           const contact = await storage.upsertContact({
             email: contactEmail || null,
             phone: contactPhone || null,
             firstName: contactFirstName?.slice(0, 200) || null,
             lastName: contactLastName?.slice(0, 200) || null,
             title: title?.slice(0, 200) || null,
-            city: contactCity?.slice(0, 200) ?? null,
+            companyName: contactCompany?.slice(0, 500) || null,
+            website: contactWebsite?.slice(0, 500) || null,
+            city: contactCity?.slice(0, 200) || null,
+            state: contactState?.slice(0, 100) || null,
+            address: contactAddress?.slice(0, 500) || null,
+            category: contactCategory?.slice(0, 200) || null,
             companyId,
             linkedinUrl: linkedinUrl?.slice(0, 500) || null,
           });

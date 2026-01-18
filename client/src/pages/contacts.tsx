@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { Users, Mail, Phone, Building2, Linkedin, Search, RefreshCw, AlertCircle, User, MapPin } from "lucide-react";
+import { Users, Mail, Phone, Building2, Linkedin, Search, RefreshCw, AlertCircle, MapPin, Globe, Tag } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,7 +24,12 @@ export default function ContactsPage() {
       contact.email?.toLowerCase().includes(searchLower) ||
       contact.firstName?.toLowerCase().includes(searchLower) ||
       contact.lastName?.toLowerCase().includes(searchLower) ||
-      contact.title?.toLowerCase().includes(searchLower)
+      contact.title?.toLowerCase().includes(searchLower) ||
+      contact.companyName?.toLowerCase().includes(searchLower) ||
+      contact.website?.toLowerCase().includes(searchLower) ||
+      contact.city?.toLowerCase().includes(searchLower) ||
+      contact.state?.toLowerCase().includes(searchLower) ||
+      contact.category?.toLowerCase().includes(searchLower)
     );
   });
 
@@ -142,8 +147,10 @@ export default function ContactsPage() {
 }
 
 function ContactCard({ contact }: { contact: Contact }) {
-  const initials = `${contact.firstName?.[0] || ""}${contact.lastName?.[0] || ""}`.toUpperCase() || "?";
-  const fullName = [contact.firstName, contact.lastName].filter(Boolean).join(" ") || "Unknown";
+  const initials = `${contact.firstName?.[0] || ""}${contact.lastName?.[0] || ""}`.toUpperCase() || 
+                   contact.companyName?.[0]?.toUpperCase() || "?";
+  const fullName = [contact.firstName, contact.lastName].filter(Boolean).join(" ") || contact.companyName || "Unknown";
+  const location = [contact.city, contact.state].filter(Boolean).join(", ");
 
   return (
     <Card className="hover-elevate transition-shadow" data-testid={`card-contact-${contact.id}`}>
@@ -167,6 +174,30 @@ function ContactCard({ contact }: { contact: Contact }) {
             )}
 
             <div className="mt-2 space-y-1">
+              {contact.companyName && (
+                <div className="flex items-center gap-2 text-sm">
+                  <Building2 className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                  <span className="truncate font-medium" data-testid={`text-company-${contact.id}`}>
+                    {contact.companyName}
+                  </span>
+                </div>
+              )}
+
+              {contact.website && (
+                <div className="flex items-center gap-2 text-sm">
+                  <Globe className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                  <a 
+                    href={contact.website.startsWith('http') ? contact.website : `https://${contact.website}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="truncate text-primary hover:underline"
+                    data-testid={`link-website-${contact.id}`}
+                  >
+                    {contact.website.replace(/^https?:\/\//, '')}
+                  </a>
+                </div>
+              )}
+
               {contact.email && (
                 <div className="flex items-center gap-2 text-sm">
                   <Mail className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
@@ -181,10 +212,19 @@ function ContactCard({ contact }: { contact: Contact }) {
                 </div>
               )}
 
-              {contact.city && (
+              {location && (
                 <div className="flex items-center gap-2 text-sm">
                   <MapPin className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                  <span className="text-muted-foreground">{contact.city}</span>
+                  <span className="text-muted-foreground" data-testid={`text-location-${contact.id}`}>
+                    {location}
+                  </span>
+                </div>
+              )}
+
+              {contact.category && (
+                <div className="flex items-center gap-2 text-sm">
+                  <Tag className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                  <span className="text-muted-foreground truncate">{contact.category}</span>
                 </div>
               )}
 
