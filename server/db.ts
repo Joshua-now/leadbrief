@@ -7,7 +7,7 @@ const { Pool } = pg;
 const dbUrl = process.env.DATABASE_URL;
 
 console.log("[DB] DATABASE_URL present:", !!dbUrl);
-console.log("[DB] DATABASE_URL starts with:", dbUrl?.substring(0, 30) + "...");
+console.log("[DB] DATABASE_URL starts with:", dbUrl?.substring(0, 50) + "...");
 
 if (!dbUrl) {
   throw new Error(
@@ -15,25 +15,38 @@ if (!dbUrl) {
   );
 }
 
-// Parse the connection string to validate and extract components
+// For Supabase pooler, use connectionString directly to preserve special username format
+const isSupabasePooler = dbUrl.includes('pooler.supabase.com');
+
 let poolConfig: pg.PoolConfig;
-try {
-  const url = new URL(dbUrl);
-  const isExternalDb = url.hostname.includes('supabase') || url.hostname.includes('pooler');
-  
+
+if (isSupabasePooler) {
+  // Use connection string directly for Supabase pooler
+  // This preserves the username format like "postgres.PROJECT_REF"
   poolConfig = {
-    host: url.hostname,
-    port: parseInt(url.port) || 5432,
-    database: url.pathname.slice(1),
-    user: url.username,
-    password: decodeURIComponent(url.password),
-    // Only enable SSL for external databases (Supabase, etc.)
-    ...(isExternalDb && { ssl: { rejectUnauthorized: false } }),
+    connectionString: dbUrl,
+    ssl: { rejectUnauthorized: false },
   };
-  console.log("[DB] Parsed config - host:", poolConfig.host, "port:", poolConfig.port, "database:", poolConfig.database, "ssl:", isExternalDb);
-} catch (e) {
-  console.error("[DB] Failed to parse DATABASE_URL:", e);
-  throw new Error("Invalid DATABASE_URL format");
+  console.log("[DB] Using Supabase pooler with connection string, ssl: true");
+} else {
+  // Parse URL for other databases
+  try {
+    const url = new URL(dbUrl);
+    const isExternalDb = url.hostname.includes('supabase');
+    
+    poolConfig = {
+      host: url.hostname,
+      port: parseInt(url.port) || 5432,
+      database: url.pathname.slice(1),
+      user: url.username,
+      password: decodeURIComponent(url.password),
+      ...(isExternalDb && { ssl: { rejectUnauthorized: false } }),
+    };
+    console.log("[DB] Parsed config - host:", poolConfig.host, "port:", poolConfig.port, "database:", poolConfig.database, "ssl:", isExternalDb);
+  } catch (e) {
+    console.error("[DB] Failed to parse DATABASE_URL:", e);
+    throw new Error("Invalid DATABASE_URL format");
+  }
 }
 
 export const pool = new Pool(poolConfig);
