@@ -74,6 +74,11 @@ export async function registerRoutes(
     const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
     const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
     
+    // Prevent caching to ensure frontend always gets fresh config
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    
     res.json({
       provider: getActiveAuthProvider(),
       isEnabled: getIsAuthEnabled(),

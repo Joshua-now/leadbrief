@@ -7,26 +7,35 @@ let configPromise: Promise<void> | null = null;
 
 // Fetch Supabase config from server (for runtime configuration)
 async function fetchSupabaseConfig(): Promise<void> {
-  if (configFetched) return;
+  if (configFetched && supabaseConfig) return;
   if (configPromise) return configPromise;
   
   configPromise = (async () => {
     try {
-      const response = await fetch('/api/auth/config');
+      // Use cache: no-store to prevent 304 responses without body
+      const response = await fetch('/api/auth/config', {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' }
+      });
       if (response.ok) {
         const data = await response.json();
+        console.log('[Supabase] Config response:', { provider: data.provider, supabaseConfigured: data.supabaseConfigured });
         if (data.supabase) {
           supabaseConfig = {
             url: data.supabase.url,
             anonKey: data.supabase.anonKey,
           };
-          console.log('[Supabase] Config fetched from server');
+          console.log('[Supabase] Config fetched from server successfully');
+          configFetched = true;
+        } else {
+          console.log('[Supabase] No supabase config in response');
         }
+      } else {
+        console.error('[Supabase] Config fetch failed with status:', response.status);
       }
     } catch (e) {
       console.error('[Supabase] Failed to fetch config:', e);
     }
-    configFetched = true;
   })();
   
   return configPromise;
