@@ -145,7 +145,7 @@ export class DatabaseStorage implements IStorage {
 
   async createContact(contact: InsertContact): Promise<Contact> {
     const normalized = normalizeContactFields(contact);
-    const [created] = await db.insert(contacts).values({
+    const contactData = {
       ...contact,
       email: contact.email?.toLowerCase(),
       emailNorm: normalized.emailNorm,
@@ -153,7 +153,8 @@ export class DatabaseStorage implements IStorage {
       phoneNorm: normalized.phoneNorm,
       sourceHash: normalized.sourceHash,
       lastSeenAt: new Date(),
-    }).returning();
+    };
+    const [created] = await db.insert(contacts).values(contactData as any).returning();
     return created;
   }
 
@@ -162,17 +163,18 @@ export class DatabaseStorage implements IStorage {
     if (normalized.emailNorm) {
       const existing = await this.getContactByEmailNorm(normalized.emailNorm);
       if (existing) {
+        const updateData = { 
+          ...contact, 
+          email: contact.email?.toLowerCase() || existing.email,
+          emailNorm: normalized.emailNorm,
+          domainNorm: normalized.domainNorm ?? existing.domainNorm,
+          phoneNorm: normalized.phoneNorm ?? existing.phoneNorm,
+          sourceHash: normalized.sourceHash,
+          lastSeenAt: new Date(),
+        };
         const [updated] = await db
           .update(contacts)
-          .set({ 
-            ...contact, 
-            email: contact.email?.toLowerCase() || existing.email,
-            emailNorm: normalized.emailNorm,
-            domainNorm: normalized.domainNorm ?? existing.domainNorm,
-            phoneNorm: normalized.phoneNorm ?? existing.phoneNorm,
-            sourceHash: normalized.sourceHash,
-            lastSeenAt: new Date(),
-          })
+          .set(updateData as any)
           .where(eq(contacts.id, existing.id))
           .returning();
         return updated;
@@ -244,29 +246,29 @@ export class DatabaseStorage implements IStorage {
 
       const existingSources: string[] = (existing.sources as string[]) || [];
       if (!existingSources.includes(source)) {
-        mergedData.sources = [...existingSources, source];
+        (mergedData as any).sources = [...existingSources, source];
       }
 
       const [updated] = await db
         .update(contacts)
-        .set(mergedData)
+        .set(mergedData as any)
         .where(eq(contacts.id, existing.id))
         .returning();
 
       return { contact: updated, isNew: false, matchedBy, fieldsUpdated };
     } else {
-      const newContact: InsertContact = {
+      const newContactData = {
         ...contact,
         email: contact.email?.toLowerCase(),
         emailNorm: normalized.emailNorm,
         domainNorm: normalized.domainNorm,
         phoneNorm: normalized.phoneNorm,
         sourceHash: normalized.sourceHash,
-        sources: [source],
+        sources: [source] as string[],
         lastSeenAt: now,
       };
 
-      const [created] = await db.insert(contacts).values(newContact).returning();
+      const [created] = await db.insert(contacts).values(newContactData as any).returning();
       return { contact: created, isNew: true, matchedBy: null, fieldsUpdated: [] };
     }
   }
