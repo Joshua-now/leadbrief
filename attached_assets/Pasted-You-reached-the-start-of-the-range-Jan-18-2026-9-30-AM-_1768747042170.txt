@@ -1,0 +1,42 @@
+You reached the start of the range
+Jan 18, 2026, 9:30 AM
+Starting Container
+[2026-01-18T14:30:50.446Z] [INFO] Log file initialized {"path":"/tmp/app.log"}
+npm warn config production Use `--omit=dev` instead.
+> rest-express@1.0.0 start
+> NODE_ENV=production node dist/index.cjs
+[2026-01-18T14:30:50.449Z] [INFO] Setting up crash handlers
+[DB] DATABASE_URL present: true
+[2026-01-18T14:30:50.449Z] [INFO] Crash handlers registered
+[DB] DATABASE_URL starts with: postgresql://postgres.ronwuihuduazbasbjlbd:aImv3Vr...
+[2026-01-18T14:30:50.449Z] [INFO] Application starting
+[DB] Using Supabase pooler with connection string, ssl: true
+[Env] Environment: Railway/External
+[Env] NODE_ENV: production
+[Env] Vars: REPL_ID=NO, REPLIT_DEPLOYMENT=NO, SUPABASE_URL=YES, SUPABASE_ANON_KEY=present(...NRkH), SESSION_SECRET=present(...5d6
+), SUPABASE_SERVICE_ROLE_KEY=present(...pEYO), DATABASE_URL=present(...gres), APP_URL=YES, API_INTAKE_KEY=present(...195
+), DEBUG_KEY=present(...2d1
+), INSTANTLY_API_KEY=NO, INSTANTLY_CAMPAIGN_ID=NO
+[Shutdown] Graceful shutdown handlers registered
+[Auth] Environment: Railway
+[Auth] REPL_ID: NO
+[Auth] SUPABASE_URL: YES
+[Auth] SUPABASE_ANON_KEY: YES
+[Supabase Server] isConfigured: true (url: true, key: true)
+[Auth] Active provider: supabase
+[Auth] Setting up Supabase Auth routes (stateless JWT-only)
+[Static] Serving static files from: /app/dist/public
+[Static] Directory exists: true
+2:30:50 PM [express] serving on port 8080
+[HealthMonitor] Started health monitoring
+[MemoryMonitor] Detected cgroup v2 limit: 30518MB
+2:32:41 PM [express] POST /api/intake 400 in 91ms :: {"success":false,"error":"column \"instantly_lead_id\" does not exist"}
+2:35:33 PM [express] GET /api/config/limits 304 in 2ms :: {"MAX_RECORDS":10000,"MAX_FILE_SIZE_MB":10,"MAX_EMAIL_LENGTH":254,"MAX_FIELD_LENGTH":500,"MIN_EMAIL_LENGTH":5}
+2:35:32 PM [express] GET /api/auth/config 200 in 1ms :: {"provider":"supabase","isEnabled":true,"supabaseConfigured":true,"supabase":{"url":"https://ronwuihuduazbasbjlbd.supabase.co","anonKey":"sb_publishable_Bu9tB5qh6P277hp-ixJyVA_EsctNRkH"}}
+[Auth] /api/auth/user request, provider: supabase
+[Supabase Server] Creating Supabase client
+[Supabase Server] verifyToken success for user: 731baced-7680-4428-8d41-16c147197e17
+2:35:33 PM [express] GET /api/auth/user 200 in 214ms :: {"id":"731baced-7680-4428-8d41-16c147197e17","email":"jbbrown09@gmail.com","firstName":null,"lastName":null,"profileImageUrl":null,"createdAt":"2026-01-18T12:50:12.460Z","updatedAt":"2026-01-18T14:35:33.487Z"}
+2:35:55 PM [express] GET /api/health 200 in 2ms :: {"ok":true,"status":"alive","timestamp":"2026-01-18T14:35:55.536Z","version":"1.0.0","uptime":306,"authProvider":"supabase"}
+[Ready] All dependencies ready: { database: 'connected (6ms)', auth: 'supabase (JWT)' }
+2:35:55 PM [express] GET /api/ready 200 in 9ms :: {"ready":true,"status":"ready","dependencies":{"database":"connected (6ms)","auth":"supabase (JWT)"},"timestamp":"2026-01-18T14:35:55.711Z"}
