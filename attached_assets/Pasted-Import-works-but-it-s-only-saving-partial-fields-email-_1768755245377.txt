@@ -1,0 +1,57 @@
+Import works but it’s only saving partial fields (email/phone). We’re missing critical fields: business name, website URL, city, state, address, category — and “Website URL” isn’t even listed in the Data Quality panel, meaning the model/UI doesn’t support it or it’s not being populated.
+
+Goal: After import, each contact must show business name + website + city/state at minimum, and Data Quality must reflect “website” as a tracked dimension.
+
+1) Diagnose exactly where fields are being lost
+
+Confirm what the import payload contains (CSV columns or API intake JSON). Log one sanitized example row.
+
+Trace mapping through: import parser → normalization → DB insert → API response → UI display.
+
+2) Fix normalization + mapping (must handle common lead sources)
+
+Add a single canonical normalization layer that supports these aliases (examples):
+
+business name: company, company_name, business_name, name, place_name
+
+website: website, website_url, domain, site
+
+location: city, state, address, formatted_address
+
+category: category, type, primary_category
+
+phone: phone, phone_number
+
+email: email, emails[]
+
+Ensure BOTH flows are correct:
+
+CSV import mapping → normalized lead
+
+POST /api/intake → normalized lead
+
+3) Update DB schema + API + UI to support these fields
+
+Add missing columns if needed (contacts table or related tables): company_name, website, domain, city, state, address, category
+
+Ensure GET contacts returns these fields and UI renders them.
+
+4) Fix Data Quality calculation + UI dimensions
+
+Data Quality panel must include and compute: website, company_name, location (city/state), email, phone, linkedin, title
+
+Scoring must not default everything to the same % when fields exist.
+
+5) Provide proof from Railway deployment (required)
+
+After deploy, paste:
+
+A sample imported contact JSON showing business_name + website + city/state populated
+
+Screenshot/text of Data Quality panel showing “Website” dimension present and non-zero for that contact
+
+/api/finalcheck still passing
+
+A one-time “import self-test” endpoint or script that imports 3 sample leads with different completeness and shows different quality scores.
+
+Do not mark complete until imported leads display business name, website URL, and city/state in Contacts and Data Quality includes Website.

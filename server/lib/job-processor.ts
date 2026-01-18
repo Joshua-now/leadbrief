@@ -24,26 +24,44 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Calculate data quality score
+// Calculate data quality score - includes all tracked dimensions
 function calculateDataQualityScore(data: Record<string, string | null | undefined>): number {
   let score = 0;
   const weights = {
-    email: 30,
-    phone: 20,
-    firstName: 15,
-    lastName: 15,
-    company: 10,
-    title: 5,
-    linkedinUrl: 5,
+    email: 20,           // Primary contact method
+    phone: 15,           // Secondary contact method
+    website: 15,         // Critical for enrichment
+    companyName: 10,     // Business identification
+    company: 10,         // Alias for companyName
+    websiteUrl: 15,      // Alias for website
+    city: 5,             // Location part 1
+    state: 5,            // Location part 2
+    linkedinUrl: 5,      // Professional profile
+    title: 5,            // Job role
+    firstName: 3,        // Name parts
+    lastName: 2,         // Name parts
+    address: 3,          // Full address
+    category: 2,         // Business category
   };
 
+  // Avoid double counting aliases
+  const counted = new Set<string>();
+  
   for (const [field, weight] of Object.entries(weights)) {
     if (data[field] && data[field]!.trim()) {
+      // Dedup aliases: website/websiteUrl and company/companyName
+      if (field === 'websiteUrl' && counted.has('website')) continue;
+      if (field === 'website' && counted.has('websiteUrl')) continue;
+      if (field === 'company' && counted.has('companyName')) continue;
+      if (field === 'companyName' && counted.has('company')) continue;
+      
       score += weight;
+      counted.add(field);
     }
   }
 
-  return score;
+  // Cap at 100
+  return Math.min(score, 100);
 }
 
 // Process a single job item with retry logic and full enrichment pipeline
@@ -143,17 +161,26 @@ async function processItem(
     lastName = nameParts.slice(1).join(" ") || null;
   }
 
-  // Merge city/state from enrichment if not in input
+  // Merge location from enrichment if not in input
   const finalCity = data.city || businessIntel.city || null;
+  const finalState = data.state || businessIntel.state || null;
+  const finalAddress = data.address || null;
+  const finalCategory = data.category || businessIntel.industry || null;
+  const finalWebsite = websiteUrl || data.websiteUrl || null;
 
-  // Create contact with validated data
+  // Create contact with validated data (including new fields)
   const contact = await storage.createContact({
     email: data.email || null,
     phone: data.phone || businessIntel.contactInfo.phone || null,
     firstName: firstName || null,
     lastName: lastName || null,
     title: data.title || null,
+    companyName: finalCompanyName || null,
+    website: finalWebsite,
     city: finalCity,
+    state: finalState,
+    address: finalAddress,
+    category: finalCategory,
     companyId,
     linkedinUrl: data.linkedinUrl || null,
     dataQualityScore: String(qualityScore),

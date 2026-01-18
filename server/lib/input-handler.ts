@@ -26,11 +26,15 @@ const ContactSchema = z.object({
   title: z.string().max(IMPORT_LIMITS.MAX_FIELD_LENGTH).optional(),
   company: z.string().max(IMPORT_LIMITS.MAX_FIELD_LENGTH).optional(),
   companyDomain: z.string().max(IMPORT_LIMITS.MAX_FIELD_LENGTH).optional(),
+  websiteUrl: z.string().max(IMPORT_LIMITS.MAX_FIELD_LENGTH).optional().or(z.literal('')),
   linkedinUrl: z.string().max(500).url().optional().or(z.literal('')),
   city: z.string().max(IMPORT_LIMITS.MAX_FIELD_LENGTH).optional().or(z.literal('')),
+  state: z.string().max(IMPORT_LIMITS.MAX_FIELD_LENGTH).optional().or(z.literal('')),
+  address: z.string().max(IMPORT_LIMITS.MAX_FIELD_LENGTH).optional().or(z.literal('')),
+  category: z.string().max(IMPORT_LIMITS.MAX_FIELD_LENGTH).optional().or(z.literal('')),
 }).refine(
-  (data) => data.email || data.phone || data.linkedinUrl,
-  'At least email, phone, or LinkedIn URL required'
+  (data) => data.email || data.phone || data.linkedinUrl || data.websiteUrl || (data.company && data.city),
+  'Requires email, phone, LinkedIn URL, website, or company+city'
 );
 
 export type ParsedContact = z.infer<typeof ContactSchema>;
@@ -346,13 +350,17 @@ export class BulkInputHandler {
     const mapping: Record<string, string[]> = {
       firstName: ['first_name', 'firstname', 'first', 'fname', 'given_name'],
       lastName: ['last_name', 'lastname', 'last', 'lname', 'surname', 'family_name'],
-      email: ['email', 'e_mail', 'email_address', 'emailaddress', 'mail'],
+      email: ['email', 'e_mail', 'email_address', 'emailaddress', 'mail', 'emails'],
       phone: ['phone', 'phone_number', 'mobile', 'telephone', 'cell', 'phonenumber'],
       title: ['title', 'job_title', 'position', 'role', 'jobtitle'],
-      company: ['company', 'company_name', 'organization', 'org', 'employer'],
-      companyDomain: ['domain', 'website', 'company_domain', 'url', 'web'],
+      company: ['company', 'company_name', 'organization', 'org', 'employer', 'business', 'business_name', 'place_name'],
+      companyDomain: ['domain', 'company_domain'],
+      websiteUrl: ['website', 'website_url', 'url', 'web', 'site', 'site_url'],
       linkedinUrl: ['linkedin', 'linkedin_url', 'linkedin_profile', 'linkedinurl'],
-      city: ['city', 'location', 'town', 'metro', 'area'],
+      city: ['city', 'town', 'metro'],
+      state: ['state', 'state_code', 'province', 'region'],
+      address: ['address', 'street_address', 'formatted_address', 'full_address', 'location'],
+      category: ['category', 'type', 'primary_category', 'business_type', 'industry'],
     };
 
     Object.entries(row).forEach(([key, value]) => {
@@ -374,13 +382,17 @@ export class BulkInputHandler {
     const fieldMap: Record<string, string[]> = {
       firstName: ['first_name', 'firstname', 'fname', 'first', 'given_name'],
       lastName: ['last_name', 'lastname', 'lname', 'last', 'surname'],
-      email: ['email', 'e_mail', 'email_address', 'mail'],
+      email: ['email', 'e_mail', 'email_address', 'mail', 'emails'],
       phone: ['phone', 'phone_number', 'mobile', 'cell'],
       title: ['title', 'job_title', 'position', 'role'],
-      company: ['company', 'company_name', 'organization', 'org'],
-      companyDomain: ['domain', 'website', 'company_domain', 'url'],
+      company: ['company', 'company_name', 'organization', 'org', 'business', 'business_name', 'place_name'],
+      companyDomain: ['domain', 'company_domain'],
+      websiteUrl: ['website', 'website_url', 'url', 'web', 'site'],
       linkedinUrl: ['linkedin', 'linkedin_url', 'linkedinurl'],
-      city: ['city', 'location', 'town', 'metro', 'area'],
+      city: ['city', 'town', 'metro'],
+      state: ['state', 'state_code', 'province', 'region'],
+      address: ['address', 'street_address', 'formatted_address', 'full_address', 'location'],
+      category: ['category', 'type', 'primary_category', 'business_type', 'industry'],
     };
 
     Object.keys(obj).forEach((key) => {

@@ -23,7 +23,16 @@ export const contacts = pgTable("contacts", {
   firstName: text("first_name"),
   lastName: text("last_name"),
   title: text("title"),
+  // Business/Company fields (denormalized for direct access)
+  companyName: text("company_name"),
+  website: text("website"),
+  // Location fields
   city: text("city"),
+  state: text("state"),
+  address: text("address"),
+  // Category/Industry
+  category: text("category"),
+  // Relations
   companyId: uuid("company_id").references(() => companies.id),
   linkedinUrl: text("linkedin_url"),
   linkedinProfileId: text("linkedin_profile_id").unique(),

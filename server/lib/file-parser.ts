@@ -11,6 +11,9 @@ interface ParsedRecord {
   companyName?: string | null;
   title?: string | null;
   city?: string | null;
+  state?: string | null;
+  address?: string | null;
+  category?: string | null;
   websiteUrl?: string | null;
   linkedinUrl?: string | null;
   [key: string]: string | null | undefined;
@@ -25,6 +28,7 @@ interface FileParseResult {
 }
 
 const HEADER_MAPPINGS: Record<string, string> = {
+  // Name mappings
   'name': 'leadName',
   'full_name': 'leadName',
   'fullname': 'leadName',
@@ -32,6 +36,8 @@ const HEADER_MAPPINGS: Record<string, string> = {
   'contactname': 'leadName',
   'lead_name': 'leadName',
   'leadname': 'leadName',
+  'place_name': 'companyName',
+  'placename': 'companyName',
   
   'first_name': 'firstName',
   'firstname': 'firstName',
@@ -44,14 +50,17 @@ const HEADER_MAPPINGS: Record<string, string> = {
   'lname': 'lastName',
   'surname': 'lastName',
   
+  // Company/Business mappings
   'company': 'companyName',
   'company_name': 'companyName',
   'companyname': 'companyName',
   'business': 'companyName',
   'business_name': 'companyName',
+  'businessname': 'companyName',
   'organization': 'companyName',
   'org': 'companyName',
   
+  // Website/Domain mappings
   'website': 'websiteUrl',
   'website_url': 'websiteUrl',
   'websiteurl': 'websiteUrl',
@@ -59,13 +68,18 @@ const HEADER_MAPPINGS: Record<string, string> = {
   'site': 'websiteUrl',
   'web': 'websiteUrl',
   'domain': 'websiteUrl',
+  'site_url': 'websiteUrl',
+  'siteurl': 'websiteUrl',
   
+  // Email mappings
   'email': 'email',
   'email_address': 'email',
   'emailaddress': 'email',
-  'e-mail': 'email',
+  'e_mail': 'email',
   'mail': 'email',
+  'emails': 'email',
   
+  // Phone mappings
   'phone': 'phone',
   'phone_number': 'phone',
   'phonenumber': 'phone',
@@ -74,16 +88,43 @@ const HEADER_MAPPINGS: Record<string, string> = {
   'mobile': 'phone',
   'cell': 'phone',
   
+  // Location mappings
   'city': 'city',
   'town': 'city',
-  'location': 'city',
+  'metro': 'city',
   
+  'state': 'state',
+  'state_code': 'state',
+  'statecode': 'state',
+  'province': 'state',
+  'region': 'state',
+  
+  'address': 'address',
+  'street_address': 'address',
+  'streetaddress': 'address',
+  'formatted_address': 'address',
+  'formattedaddress': 'address',
+  'full_address': 'address',
+  'fulladdress': 'address',
+  'location': 'address',
+  
+  // Category mappings
+  'category': 'category',
+  'type': 'category',
+  'primary_category': 'category',
+  'primarycategory': 'category',
+  'business_type': 'category',
+  'businesstype': 'category',
+  'industry': 'category',
+  
+  // Title/Role mappings
   'title': 'title',
   'job_title': 'title',
   'jobtitle': 'title',
   'position': 'title',
   'role': 'title',
   
+  // LinkedIn mappings
   'linkedin': 'linkedinUrl',
   'linkedin_url': 'linkedinUrl',
   'linkedinurl': 'linkedinUrl',
