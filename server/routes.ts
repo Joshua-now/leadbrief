@@ -1584,35 +1584,39 @@ export async function registerRoutes(
         };
       });
       
-      // Deduplicate export records: phone > email > company+city
-      const seen = new Set<string>();
-      const exportRecords = rawRecords.filter(record => {
+      // Deduplicate export records using priority: phone > email > company+city
+      // Track ALL identifiers that have been claimed by kept records
+      type ExportRecord = typeof rawRecords[0];
+      const keptRecords: ExportRecord[] = [];
+      const seenPhones = new Set<string>();
+      const seenEmails = new Set<string>();
+      const seenCompanyCities = new Set<string>();
+      
+      for (const record of rawRecords) {
         const phoneNorm = typeof record.phone === 'string' ? record.phone.replace(/\D/g, '') : null;
+        const hasPhone = phoneNorm && phoneNorm.length >= 7;
+        const emailNorm = typeof record.email === 'string' ? record.email.toLowerCase() : null;
         const companyNorm = typeof record.company_name === 'string' ? record.company_name.toLowerCase().trim() : null;
         const cityNorm = typeof record.city === 'string' ? record.city.toLowerCase().trim() : null;
+        const companyCityKey = (companyNorm && cityNorm) ? `${companyNorm}|${cityNorm}` : null;
         
-        // Check by phone
-        if (phoneNorm && phoneNorm.length >= 7) {
-          if (seen.has(`phone:${phoneNorm}`)) return false;
-          seen.add(`phone:${phoneNorm}`);
-        }
+        // Check if this record is a duplicate of an already-kept record
+        // A record is a duplicate if ANY of its identifiers was already claimed
+        let isDuplicate = false;
+        if (hasPhone && seenPhones.has(phoneNorm)) isDuplicate = true;
+        if (emailNorm && seenEmails.has(emailNorm)) isDuplicate = true;
+        if (companyCityKey && seenCompanyCities.has(companyCityKey)) isDuplicate = true;
         
-        // Check by email
-        if (record.email) {
-          if (seen.has(`email:${record.email.toLowerCase()}`)) return false;
-          seen.add(`email:${record.email.toLowerCase()}`);
-        }
+        if (isDuplicate) continue;
         
-        // Check by company+city
-        if (companyNorm && cityNorm) {
-          const key = `company:${companyNorm}|${cityNorm}`;
-          if (seen.has(key)) return false;
-          seen.add(key);
-        }
-        
-        return true;
-      });
+        // Keep this record and claim ALL its identifiers
+        keptRecords.push(record);
+        if (hasPhone) seenPhones.add(phoneNorm);
+        if (emailNorm) seenEmails.add(emailNorm);
+        if (companyCityKey) seenCompanyCities.add(companyCityKey);
+      }
       
+      const exportRecords = keptRecords;
       console.log(`[Export] Deduplicated: ${rawRecords.length} -> ${exportRecords.length} records`);
 
       if (format === 'csv') {
