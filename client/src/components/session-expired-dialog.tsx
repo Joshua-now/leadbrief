@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { onSessionExpired, clearSessionExpired } from "@/lib/session-manager";
+import { isSupabaseConfigured } from "@/lib/supabase";
 
 export function SessionExpiredDialog() {
   const [isOpen, setIsOpen] = useState(false);
@@ -23,7 +24,13 @@ export function SessionExpiredDialog() {
 
   const handleLogin = () => {
     clearSessionExpired();
-    window.location.href = "/api/login";
+    // For Supabase auth, go to the frontend login page
+    // For Replit auth, use the API endpoint which redirects to OIDC
+    if (isSupabaseConfigured()) {
+      window.location.href = "/login";
+    } else {
+      window.location.href = "/api/login";
+    }
   };
 
   const handleClose = () => {
