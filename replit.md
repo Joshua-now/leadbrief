@@ -132,8 +132,11 @@ The backend uses a modular route registration pattern with dedicated storage abs
 | `/api/contacts/:id` | GET | Get contact details |
 | `/api/health` | GET | System health check (liveness) |
 | `/api/ready` | GET | Dependency readiness check |
+| `/api/debug/session` | GET | Debug auth state (protected) - returns userId, email, provider, session expiry |
 | `/api/finalcheck` | GET | Comprehensive verification (tests health, ready, intake auth, DB write) |
 | `/api/config/limits` | GET | Get import limits |
+| `/api/jobs/:id/export` | GET | Export job results (CSV/JSON) - returns structured noData response if empty |
+| `/api/contacts/export` | GET | Export all contacts (CSV/JSON) - returns structured noData response if empty |
 | `/api/auth/user` | GET | Get current authenticated user |
 | `/api/settings` | GET/POST | User settings (protected) |
 | `/api/login` | GET | Initiate Replit Auth login |
