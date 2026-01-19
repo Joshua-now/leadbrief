@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { FileText, Clock, CheckCircle2, XCircle, Loader2, AlertCircle, RefreshCw, RotateCcw, Download, ChevronDown, ChevronUp, FolderOpen, Shield } from "lucide-react";
+import { FileText, Clock, CheckCircle2, XCircle, Loader2, AlertCircle, RefreshCw, RotateCcw, Download, ChevronDown, ChevronUp, FolderOpen, Shield, Archive, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +10,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { exportFile } from "@/lib/export-utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import type { BulkJob } from "@shared/schema";
 
 interface AuthConfig {
@@ -48,8 +58,18 @@ const statusConfig: Record<string, { icon: React.ElementType; color: string; lab
 };
 
 export default function JobsPage() {
+  const [filter, setFilter] = useState<'active' | 'archived'>('active');
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [jobToDelete, setJobToDelete] = useState<BulkJob | null>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  
   const { data: jobs, isLoading, error, refetch } = useQuery<BulkJob[]>({
-    queryKey: ["/api/jobs"],
+    queryKey: ["/api/jobs", filter],
+    queryFn: async () => {
+      const response = await fetch(`/api/jobs?filter=${filter}`, { credentials: 'include' });
+      if (!response.ok) throw new Error(`${response.status}`);
+      return response.json();
+    },
     refetchInterval: 5000,
   });
   const queryClient = useQueryClient();
@@ -98,6 +118,63 @@ export default function JobsPage() {
       });
     },
   });
+
+  const archiveMutation = useMutation({
+    mutationFn: async (jobId: string) => {
+      const response = await apiRequest("POST", `/api/jobs/${jobId}/archive`);
+      return await response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Job Archived",
+        description: "The job has been moved to the archive.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Archive Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (jobId: string) => {
+      const response = await apiRequest("DELETE", `/api/jobs/${jobId}`, { confirmDelete: "DELETE" });
+      return await response.json();
+    },
+    onSuccess: (data: { message: string; itemsDeleted: number }) => {
+      toast({
+        title: "Job Deleted",
+        description: data.message,
+      });
+      setDeleteDialogOpen(false);
+      setJobToDelete(null);
+      setDeleteConfirmText("");
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Delete Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDeleteClick = (job: BulkJob) => {
+    setJobToDelete(job);
+    setDeleteConfirmText("");
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (deleteConfirmText === "DELETE" && jobToDelete) {
+      deleteMutation.mutate(jobToDelete.id);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -176,7 +253,26 @@ export default function JobsPage() {
             <h1 className="text-2xl font-semibold tracking-tight">Jobs</h1>
             <p className="text-muted-foreground">Track import and enrichment progress</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center rounded-md border bg-muted/50 p-1">
+              <Button
+                variant={filter === 'active' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setFilter('active')}
+                data-testid="button-filter-active"
+              >
+                Active
+              </Button>
+              <Button
+                variant={filter === 'archived' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setFilter('archived')}
+                data-testid="button-filter-archived"
+              >
+                <Archive className="mr-2 h-4 w-4" />
+                Archived
+              </Button>
+            </div>
             {hasProcessingJobs && (
               <Button 
                 variant="outline" 
@@ -223,10 +319,65 @@ export default function JobsPage() {
                 job={job} 
                 onRetry={() => retryMutation.mutate(job.id)}
                 isRetrying={retryMutation.isPending}
+                onArchive={() => archiveMutation.mutate(job.id)}
+                isArchiving={archiveMutation.isPending}
+                onDelete={() => handleDeleteClick(job)}
+                showArchive={filter === 'active'}
               />
             ))}
           </div>
         )}
+
+        <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-destructive">
+                <Trash2 className="h-5 w-5" />
+                Delete Job
+              </DialogTitle>
+              <DialogDescription>
+                This action cannot be undone. This will permanently delete the job
+                <strong className="block mt-2">&quot;{jobToDelete?.name}&quot;</strong>
+                and its {jobToDelete?.totalRecords || 0} import records. Contacts created from this job will remain and must be deleted separately.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <Label htmlFor="confirm-delete">
+                Type <strong>DELETE</strong> to confirm
+              </Label>
+              <Input
+                id="confirm-delete"
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                placeholder="DELETE"
+                className="mt-2"
+                data-testid="input-confirm-delete"
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setDeleteDialogOpen(false)}
+                data-testid="button-cancel-delete"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleConfirmDelete}
+                disabled={deleteConfirmText !== "DELETE" || deleteMutation.isPending}
+                data-testid="button-confirm-delete"
+              >
+                {deleteMutation.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="mr-2 h-4 w-4" />
+                )}
+                Delete Job
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
         
         <RecentExportsPanel />
         <DiagnosticsPanel />
@@ -235,10 +386,14 @@ export default function JobsPage() {
   );
 }
 
-function JobCard({ job, onRetry, isRetrying }: { 
+function JobCard({ job, onRetry, isRetrying, onArchive, isArchiving, onDelete, showArchive }: { 
   job: BulkJob; 
   onRetry: () => void; 
   isRetrying: boolean;
+  onArchive: () => void;
+  isArchiving: boolean;
+  onDelete: () => void;
+  showArchive: boolean;
 }) {
   const [isExporting, setIsExporting] = useState(false);
   const { toast } = useToast();
@@ -250,6 +405,7 @@ function JobCard({ job, onRetry, isRetrying }: {
 
   const canRetry = job.status === "failed" || (job.status === "complete" && (job.failed || 0) > 0);
   const canExport = job.status === "complete" || job.status === "completed";
+  const canArchive = showArchive && (job.status === "complete" || job.status === "completed" || job.status === "failed");
 
   const handleExport = async (format: 'csv' | 'json', scope: 'full' | 'core' = 'full') => {
     if ((job.successful || 0) === 0) {
@@ -402,6 +558,33 @@ function JobCard({ job, onRetry, isRetrying }: {
                 )}
               </Button>
             )}
+            {canArchive && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onArchive}
+                disabled={isArchiving}
+                data-testid={`button-archive-${job.id}`}
+              >
+                {isArchiving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    <Archive className="mr-2 h-4 w-4" />
+                    Archive
+                  </>
+                )}
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onDelete}
+              className="text-muted-foreground hover:text-destructive"
+              data-testid={`button-delete-${job.id}`}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
           </div>
         </div>
       </CardContent>

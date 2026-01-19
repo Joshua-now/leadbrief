@@ -1,6 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow, format } from "date-fns";
-import { Users, Mail, Phone, Building2, Linkedin, Search, RefreshCw, AlertCircle, MapPin, Globe, Tag, Download, Loader2, X, Calendar, Clock, Eye, ExternalLink, Briefcase } from "lucide-react";
+import { Users, Mail, Phone, Building2, Linkedin, Search, RefreshCw, AlertCircle, MapPin, Globe, Tag, Download, Loader2, X, Calendar, Clock, Eye, ExternalLink, Briefcase, Trash2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -9,10 +9,12 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
+import { Label } from "@/components/ui/label";
 import { exportFile } from "@/lib/export-utils";
 import { apiGet } from "@/lib/apiClient";
+import { apiRequest } from "@/lib/queryClient";
 import type { Contact } from "@shared/schema";
 
 interface ContactWithCompany extends Contact {
@@ -371,6 +373,33 @@ function ContactDetailModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await apiRequest("DELETE", `/api/contacts/${id}`, { confirm: true });
+      return await response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Contact Deleted",
+        description: "The contact has been permanently deleted.",
+      });
+      setDeleteDialogOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
+      onClose();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Delete Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
 
   useEffect(() => {
     if (!open || !contactId) {
@@ -611,8 +640,61 @@ function ContactDetailModal({
                 </div>
               </>
             )}
+
+            <Separator />
+
+            <div className="flex justify-end">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setDeleteDialogOpen(true)}
+                className="text-muted-foreground hover:text-destructive"
+                data-testid="button-delete-contact"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete Contact
+              </Button>
+            </div>
           </div>
         )}
+
+        <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-destructive">
+                <Trash2 className="h-5 w-5" />
+                Delete Contact
+              </DialogTitle>
+              <DialogDescription>
+                Are you sure you want to permanently delete this contact?
+                <strong className="block mt-2">{fullName}</strong>
+                This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setDeleteDialogOpen(false)}
+                data-testid="button-cancel-delete-contact"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => contactId && deleteMutation.mutate(contactId)}
+                disabled={deleteMutation.isPending}
+                data-testid="button-confirm-delete-contact"
+              >
+                {deleteMutation.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="mr-2 h-4 w-4" />
+                )}
+                Delete
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </DialogContent>
     </Dialog>
   );

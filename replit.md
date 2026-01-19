@@ -124,12 +124,16 @@ The backend uses a modular route registration pattern with dedicated storage abs
 |----------|--------|-------------|
 | `/api/import/bulk` | POST | Bulk import CSV/JSON/email list |
 | `/api/intake` | POST | Single contact intake (requires X-API-Key when API_INTAKE_KEY is set) |
-| `/api/jobs` | GET | List all jobs |
+| `/api/jobs` | GET | List jobs (supports filter=active\|archived, default: active) |
 | `/api/jobs/:id` | GET | Get job details with stats |
 | `/api/jobs/:id/retry` | POST | Retry failed job |
+| `/api/jobs/:id/archive` | POST | Archive a job (sets archivedAt timestamp) |
+| `/api/jobs/:id` | DELETE | Delete job and cascade items (requires confirmDelete: "DELETE") |
+| `/api/jobs/:id/contacts` | DELETE | Delete contacts linked to job (requires confirm: true) |
 | `/api/jobs/recover` | POST | Recover stale jobs |
 | `/api/contacts` | GET | List contacts (paginated) |
 | `/api/contacts/:id` | GET | Get contact details with company relation (UUID required) |
+| `/api/contacts/:id` | DELETE | Delete a contact (requires confirm: true) |
 | `/api/health` | GET | System health check (liveness) |
 | `/api/ready` | GET | Dependency readiness check |
 | `/api/debug/session` | GET | Debug auth state (protected) - returns userId, email, provider, session expiry |
