@@ -211,6 +211,11 @@ function JobCard({ job, onRetry, isRetrying, onExportSuccess, onExportError }: {
   const canExport = job.status === "complete" || job.status === "completed";
 
   const handleExport = async (format: 'csv' | 'json') => {
+    if ((job.successful || 0) === 0) {
+      onExportError('No completed records to export. Process some records first.');
+      return;
+    }
+    
     setIsExporting(true);
     try {
       const response = await fetch(`/api/jobs/${job.id}/export?format=${format}`, {
@@ -219,13 +224,20 @@ function JobCard({ job, onRetry, isRetrying, onExportSuccess, onExportError }: {
       });
       
       if (response.status === 401) {
-        throw new Error('Please log in to export data');
+        onExportError('Session expired - please log in again to export data.');
+        return;
       }
       if (response.status === 404) {
-        throw new Error('Job not found');
+        onExportError('Job not found. It may have been deleted.');
+        return;
+      }
+      if (response.status === 500) {
+        onExportError('Server error - please try again or check server logs.');
+        return;
       }
       if (!response.ok) {
-        throw new Error(`Export failed (${response.status})`);
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(errorBody.error || `Export failed (${response.status})`);
       }
       
       const blob = await response.blob();
@@ -240,7 +252,7 @@ function JobCard({ job, onRetry, isRetrying, onExportSuccess, onExportError }: {
       onExportSuccess();
     } catch (error) {
       console.error('Export error:', error);
-      onExportError(error instanceof Error ? error.message : 'Export failed');
+      onExportError(error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.');
     } finally {
       setIsExporting(false);
     }

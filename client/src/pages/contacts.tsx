@@ -21,6 +21,15 @@ export default function ContactsPage() {
   });
 
   const handleExport = async (format: 'csv' | 'json') => {
+    if (!contacts?.length) {
+      toast({ 
+        title: "No Data to Export", 
+        description: "There are no contacts to export. Import some data first.", 
+        variant: "destructive" 
+      });
+      return;
+    }
+    
     setIsExporting(true);
     try {
       const response = await fetch(`/api/contacts/export?format=${format}`, {
@@ -29,10 +38,24 @@ export default function ContactsPage() {
       });
       
       if (response.status === 401) {
-        throw new Error('Please log in to export data');
+        toast({ 
+          title: "Session Expired", 
+          description: "Please log in again to export data.", 
+          variant: "destructive" 
+        });
+        return;
+      }
+      if (response.status === 500) {
+        toast({ 
+          title: "Server Error", 
+          description: "Export failed. Please try again or check server logs.", 
+          variant: "destructive" 
+        });
+        return;
       }
       if (!response.ok) {
-        throw new Error(`Export failed (${response.status})`);
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(errorBody.error || `Export failed (${response.status})`);
       }
       
       const blob = await response.blob();
@@ -47,7 +70,11 @@ export default function ContactsPage() {
       toast({ title: "Export Complete", description: "File downloaded successfully" });
     } catch (error) {
       console.error('Export error:', error);
-      toast({ title: "Export Failed", description: error instanceof Error ? error.message : 'Export failed', variant: "destructive" });
+      toast({ 
+        title: "Export Failed", 
+        description: error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.', 
+        variant: "destructive" 
+      });
     } finally {
       setIsExporting(false);
     }
