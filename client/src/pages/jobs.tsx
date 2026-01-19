@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { FileText, Clock, CheckCircle2, XCircle, Loader2, AlertCircle, RefreshCw, RotateCcw, Download, ChevronDown, ChevronUp, FolderOpen } from "lucide-react";
+import { FileText, Clock, CheckCircle2, XCircle, Loader2, AlertCircle, RefreshCw, RotateCcw, Download, ChevronDown, ChevronUp, FolderOpen, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,25 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { exportFile } from "@/lib/export-utils";
 import type { BulkJob } from "@shared/schema";
+
+interface AuthConfig {
+  provider: string;
+  isEnabled: boolean;
+  supabaseConfigured: boolean;
+}
+
+interface ExportHealthData {
+  database: {
+    companies: number;
+    contacts: number;
+    jobs: number;
+    jobItems: number;
+  };
+  quality: {
+    avgQualityScore: string;
+    completionRate: string;
+  };
+}
 
 interface ExportFile {
   name: string;
@@ -210,6 +229,7 @@ export default function JobsPage() {
         )}
         
         <RecentExportsPanel />
+        <DiagnosticsPanel />
       </div>
     </div>
   );
@@ -316,22 +336,38 @@ function JobCard({ job, onRetry, isRetrying }: {
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {canExport && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleExport('csv')}
-                disabled={isExporting}
-                data-testid={`button-export-${job.id}`}
-              >
-                {isExporting ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Download className="mr-2 h-4 w-4" />
-                )}
-                {isExporting ? 'Exporting...' : 'Export CSV'}
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleExport('csv')}
+                  disabled={isExporting}
+                  data-testid={`button-export-csv-${job.id}`}
+                >
+                  {isExporting ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="mr-2 h-4 w-4" />
+                  )}
+                  {isExporting ? 'Exporting...' : 'CSV'}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleExport('json')}
+                  disabled={isExporting}
+                  data-testid={`button-export-json-${job.id}`}
+                >
+                  {isExporting ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="mr-2 h-4 w-4" />
+                  )}
+                  JSON
+                </Button>
+              </>
             )}
             {canRetry && (
               <Button
@@ -463,6 +499,142 @@ function RecentExportsPanel() {
               ))}
             </div>
           )}
+        </CardContent>
+      )}
+    </Card>
+  );
+}
+
+function DiagnosticsPanel() {
+  const [isExpanded, setIsExpanded] = useState(false);
+  
+  const { data: authConfig } = useQuery<AuthConfig>({
+    queryKey: ["/api/auth/config"],
+    enabled: isExpanded,
+  });
+  
+  const { data: exportHealth, isLoading: healthLoading } = useQuery<ExportHealthData>({
+    queryKey: ["/api/debug/export-health"],
+    enabled: isExpanded,
+  });
+  
+  const { data: recentExports } = useQuery<{ exports: ExportFile[]; count: number }>({
+    queryKey: ["/api/exports"],
+    enabled: isExpanded,
+  });
+  
+  return (
+    <Card className="mt-4" data-testid="panel-diagnostics">
+      <CardHeader className="cursor-pointer pb-3" onClick={() => setIsExpanded(prev => !prev)}>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Shield className="h-5 w-5 text-muted-foreground" />
+            <CardTitle className="text-base">Diagnostics</CardTitle>
+            <Badge variant="secondary" className="text-xs">Admin</Badge>
+          </div>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            data-testid="button-toggle-diagnostics"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsExpanded(prev => !prev);
+            }}
+          >
+            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </Button>
+        </div>
+      </CardHeader>
+      
+      {isExpanded && (
+        <CardContent className="pt-0 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium">Authentication</h4>
+              <div className="text-xs space-y-1 text-muted-foreground">
+                <div className="flex justify-between">
+                  <span>Provider:</span>
+                  <Badge variant="outline" className="text-xs">
+                    {authConfig?.provider || 'loading...'}
+                  </Badge>
+                </div>
+                <div className="flex justify-between">
+                  <span>Auth Enabled:</span>
+                  <span>{authConfig?.isEnabled ? 'Yes' : 'No'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Supabase:</span>
+                  <span>{authConfig?.supabaseConfigured ? 'Configured' : 'Not configured'}</span>
+                </div>
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium">API Configuration</h4>
+              <div className="text-xs space-y-1 text-muted-foreground">
+                <div className="flex justify-between">
+                  <span>Base URL:</span>
+                  <span className="truncate max-w-32">{window.location.origin}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Environment:</span>
+                  <Badge variant="outline" className="text-xs">
+                    {import.meta.env.MODE}
+                  </Badge>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="space-y-2">
+            <h4 className="text-sm font-medium">Database Stats</h4>
+            {healthLoading ? (
+              <Skeleton className="h-16 w-full" />
+            ) : exportHealth ? (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                <div className="bg-muted/50 rounded p-2">
+                  <div className="text-muted-foreground">Companies</div>
+                  <div className="font-medium">{exportHealth.database?.companies || 0}</div>
+                </div>
+                <div className="bg-muted/50 rounded p-2">
+                  <div className="text-muted-foreground">Contacts</div>
+                  <div className="font-medium">{exportHealth.database?.contacts || 0}</div>
+                </div>
+                <div className="bg-muted/50 rounded p-2">
+                  <div className="text-muted-foreground">Jobs</div>
+                  <div className="font-medium">{exportHealth.database?.jobs || 0}</div>
+                </div>
+                <div className="bg-muted/50 rounded p-2">
+                  <div className="text-muted-foreground">Job Items</div>
+                  <div className="font-medium">{exportHealth.database?.jobItems || 0}</div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-xs text-muted-foreground">Unable to load stats</div>
+            )}
+          </div>
+          
+          <div className="space-y-2">
+            <h4 className="text-sm font-medium">Last Export</h4>
+            {recentExports && recentExports.exports.length > 0 ? (
+              <div className="text-xs space-y-1 text-muted-foreground">
+                <div className="flex justify-between">
+                  <span>File:</span>
+                  <span className="truncate max-w-48">{recentExports.exports[0].name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Created:</span>
+                  <span>{formatDistanceToNow(new Date(recentExports.exports[0].createdAt), { addSuffix: true })}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Size:</span>
+                  <span>{(recentExports.exports[0].size / 1024).toFixed(1)} KB</span>
+                </div>
+              </div>
+            ) : (
+              <div className="text-xs text-muted-foreground">No exports yet</div>
+            )}
+          </div>
         </CardContent>
       )}
     </Card>

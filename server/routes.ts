@@ -1675,11 +1675,14 @@ export async function registerRoutes(
 
   // Export job results (CSV or JSON) - protected
   app.get("/api/jobs/:id/export", isAuthenticated, async (req: Request, res: Response) => {
+    const startTime = Date.now();
+    const userId = (req as any).user?.id || (req as any).session?.userId || 'anonymous';
+    
     try {
       const { id } = req.params;
       const format = (req.query.format as string) || 'json';
       
-      console.log(`[Export] Job export requested: ${id}, format: ${format}`);
+      console.log(`[Export] Job export requested: job=${id}, format=${format}, user=${userId}`);
       
       if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
         console.log(`[Export] Invalid job ID format: ${id}`);
@@ -1710,9 +1713,32 @@ export async function registerRoutes(
       }, {} as Record<string, number>);
       console.log(`[Export] Status breakdown:`, JSON.stringify(statusCounts));
       
-      // Return structured "no data" response if no completed items
+      // Handle empty dataset - return headers-only CSV for CSV format
       if (filteredItems.length === 0) {
-        console.log(`[Export] No completed items for job: ${id}`);
+        const duration = Date.now() - startTime;
+        console.log(`[Export] No completed items for job: ${id}, returning empty export, duration=${duration}ms`);
+        
+        if (format === 'csv') {
+          // Return CSV with headers only
+          const headers = [
+            'company_name', 'website', 'city', 'state', 'category', 'services',
+            'personalization_bullet_1', 'personalization_bullet_2', 'personalization_bullet_3', 'personalization_bullet_4',
+            'icebreaker', 'confidence_score', 'confidence_rationale',
+            'scrape_url', 'scrape_status',
+            'email', 'phone', 'first_name', 'last_name', 'title'
+          ];
+          const csvContent = headers.join(',');
+          
+          res.setHeader('Content-Type', 'text/csv');
+          res.setHeader('Content-Disposition', `attachment; filename="export-${id}-empty.csv"`);
+          res.setHeader('X-Export-Empty', 'true');
+          res.setHeader('X-Export-Rows', '0');
+          console.log(`[Export Complete] job=${id}, format=csv, rows=0, status=200, duration=${duration}ms, user=${userId}`);
+          return res.send(csvContent);
+        }
+        
+        // JSON format for empty
+        console.log(`[Export Complete] job=${id}, format=json, rows=0, status=200, duration=${duration}ms, user=${userId}`);
         return res.status(200).json({
           noData: true,
           reason: items.length === 0 
@@ -1860,9 +1886,14 @@ export async function registerRoutes(
           res.setHeader('X-Export-Path', artifact.filePath);
           res.setHeader('X-Export-Rows', artifact.rowCount.toString());
         }
+        
+        const duration = Date.now() - startTime;
+        console.log(`[Export Complete] job=${id}, format=csv, rows=${exportRecords.length}, status=200, duration=${duration}ms, user=${userId}, artifact=${artifact?.filename || 'none'}`);
         res.send(csvContent);
       } else {
         // JSON export with schema metadata
+        const duration = Date.now() - startTime;
+        console.log(`[Export Complete] job=${id}, format=json, rows=${exportRecords.length}, status=200, duration=${duration}ms, user=${userId}`);
         res.json({
           job: {
             id: job.id,
@@ -1898,7 +1929,8 @@ export async function registerRoutes(
         });
       }
     } catch (error) {
-      console.error("Export error:", error);
+      const duration = Date.now() - startTime;
+      console.error(`[Export Error] job=${req.params.id}, status=500, duration=${duration}ms, user=${userId}, error=`, error);
       res.status(500).json({ error: "Export failed" });
     }
   });
@@ -1934,6 +1966,31 @@ export async function registerRoutes(
       console.error("Error downloading export:", error);
       res.status(500).json({ error: "Failed to download export" });
     }
+  });
+
+  // Centralized error handler - ensures all API errors return JSON, never HTML
+  app.use('/api', (err: any, req: Request, res: Response, _next: any) => {
+    console.error(`[API Error] ${req.method} ${req.path}:`, err);
+    
+    const status = err.status || err.statusCode || 500;
+    const message = err.message || 'Internal server error';
+    
+    // Always return JSON for API routes
+    res.status(status).json({
+      error: message,
+      status,
+      path: req.path,
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  // Catch-all for unmatched API routes - return 404 JSON
+  app.use('/api/*', (req: Request, res: Response) => {
+    res.status(404).json({
+      error: 'Not found',
+      path: req.path,
+      timestamp: new Date().toISOString(),
+    });
   });
 
   return httpServer;
