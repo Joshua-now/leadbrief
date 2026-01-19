@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { SessionExpiredDialog } from "@/components/session-expired-dialog";
 import { useAuth } from "@/hooks/use-auth";
 import ImportPage from "@/pages/import";
 import JobsPage from "@/pages/jobs";
@@ -89,6 +90,7 @@ function AppWrapper() {
       <TooltipProvider>
         <App />
         <Toaster />
+        <SessionExpiredDialog />
       </TooltipProvider>
     </QueryClientProvider>
   );
