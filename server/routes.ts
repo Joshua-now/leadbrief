@@ -14,7 +14,7 @@ import { getSystemHealth, withTimeout, categorizeError } from "./lib/guardrails"
 import { getEnvPresenceFlags, getAppVersion, checkDependencies } from "./lib/env";
 import { getLastLogs, crashLog } from "./lib/crash-logger";
 import { pushToInstantly, pushBatchToInstantly, isInstantlyConfigured, getInstantlyConfig } from "./lib/instantly";
-import { normalizeWebsiteUrl } from "./lib/normalize";
+import { normalizeWebsiteUrl, normalizeContact, normalizeEmail, normalizePhoneE164, normalizeCity } from "./lib/normalize";
 import { writeExportArtifact, listExportFiles, getExportFile, type ExportArtifactMetadata } from "./lib/exportArtifacts";
 
 const upload = multer({
@@ -1314,13 +1314,14 @@ export async function registerRoutes(
         for (const contact of contacts) {
           let row: string[];
           if (scope === 'core') {
+            // Use centralized normalization for canonical fields
             row = [
-              escapeCSV(contact.companyName),
-              escapeCSV(contact.city),
-              escapeCSV(contact.email),
-              escapeCSV(contact.phone),
-              escapeCSV(contact.website),
-              escapeCSV(contact.state),
+              escapeCSV(contact.companyName?.trim() || null),
+              escapeCSV(normalizeCity(contact.city)),
+              escapeCSV(normalizeEmail(contact.email)),
+              escapeCSV(normalizePhoneE164(contact.phone)),
+              escapeCSV(normalizeWebsiteUrl(contact.website)),
+              escapeCSV(contact.state?.trim() || null),
               escapeCSV(contact.category),
             ];
           } else {
@@ -1360,13 +1361,14 @@ export async function registerRoutes(
         // JSON export
         const mappedContacts = contacts.map((c: typeof contacts[0]) => {
           if (scope === 'core') {
+            // Use centralized normalization for canonical fields
             return {
-              company_name: c.companyName ?? null,
-              city: c.city ?? null,
-              email: c.email ?? null,
-              phone: c.phone ?? null,
-              website: c.website ?? null,
-              state: c.state ?? null,
+              company_name: c.companyName?.trim() ?? null,
+              city: normalizeCity(c.city),
+              email: normalizeEmail(c.email),
+              phone: normalizePhoneE164(c.phone),
+              website: normalizeWebsiteUrl(c.website),
+              state: c.state?.trim() ?? null,
               category: c.category ?? null,
             };
           }
@@ -1868,18 +1870,18 @@ export async function registerRoutes(
         let filenamePrefix: string;
         
         if (scope === 'core') {
-          // Core export: Only canonical 5 fields + state/category (outreach-ready)
+          // Core export: Only canonical 7 fields (outreach-ready) with centralized normalization
           headers = ['company_name', 'city', 'email', 'phone', 'website', 'state', 'category'];
           csvRows = [headers.join(',')];
           
           for (const record of exportRecords) {
             const row = [
-              escapeCSV(record.company_name as string | null),
-              escapeCSV(record.city as string | null),
-              escapeCSV(record.email),
-              escapeCSV(record.phone),
-              escapeCSV(record.website as string | null),
-              escapeCSV(record.state as string | null),
+              escapeCSV(typeof record.company_name === 'string' ? record.company_name.trim() : null),
+              escapeCSV(normalizeCity(record.city as string | null)),
+              escapeCSV(normalizeEmail(record.email)),
+              escapeCSV(normalizePhoneE164(record.phone)),
+              escapeCSV(normalizeWebsiteUrl(record.website as string | null)),
+              escapeCSV(typeof record.state === 'string' ? record.state.trim() : null),
               escapeCSV(record.category as string | null),
             ];
             csvRows.push(row.join(','));
@@ -1950,14 +1952,14 @@ export async function registerRoutes(
         console.log(`[Export Complete] job=${id}, format=json, scope=${scope}, rows=${exportRecords.length}, status=200, duration=${duration}ms, user=${userId}`);
         
         if (scope === 'core') {
-          // Core JSON export: Only canonical 5 fields + state/category (always include keys even if null)
+          // Core JSON export: Only canonical 7 fields with centralized normalization
           const coreRecords = exportRecords.map(r => ({
-            company_name: r.company_name ?? null,
-            city: r.city ?? null,
-            email: r.email ?? null,
-            phone: r.phone ?? null,
-            website: r.website ?? null,
-            state: r.state ?? null,
+            company_name: typeof r.company_name === 'string' ? r.company_name.trim() : null,
+            city: normalizeCity(r.city as string | null),
+            email: normalizeEmail(r.email),
+            phone: normalizePhoneE164(r.phone),
+            website: normalizeWebsiteUrl(r.website as string | null),
+            state: typeof r.state === 'string' ? r.state.trim() : null,
             category: r.category ?? null,
           }));
           
