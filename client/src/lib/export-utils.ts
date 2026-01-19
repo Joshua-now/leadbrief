@@ -144,6 +144,7 @@ export async function exportFile(options: ExportOptions): Promise<ExportResult> 
     const artifactFilename = response.headers.get('X-Export-Filename');
     const artifactPath = response.headers.get('X-Export-Path');
     const artifactRows = response.headers.get('X-Export-Rows');
+    const isEmptyExport = response.headers.get('X-Export-Empty') === 'true';
     
     const artifact: ExportArtifactMetadata = {
       filename: artifactFilename,
@@ -151,10 +152,11 @@ export async function exportFile(options: ExportOptions): Promise<ExportResult> 
       rowCount: artifactRows ? parseInt(artifactRows, 10) : null,
     };
     
-    console.log(`[Export] Artifact metadata:`, artifact);
+    console.log(`[Export] Artifact metadata:`, artifact, { isEmptyExport });
     
     const blob = await response.blob();
     
+    // Don't treat headers-only CSV as an error - still download it
     if (blob.size === 0) {
       const errorMsg = 'Export returned empty file. No data to export.';
       console.warn(`[Export] Empty blob received`, { url });
@@ -177,14 +179,21 @@ export async function exportFile(options: ExportOptions): Promise<ExportResult> 
     window.URL.revokeObjectURL(blobUrl);
     document.body.removeChild(a);
     
-    // Show toast with artifact filename if available
+    // Show appropriate toast based on whether export has data
     const displayFilename = artifact.filename || filename;
-    toast({
-      title: "Export Complete",
-      description: artifact.filename 
-        ? `Downloaded ${displayFilename} (saved to server)`
-        : `Downloaded ${displayFilename}`,
-    });
+    if (isEmptyExport) {
+      toast({
+        title: "Export Complete (Headers Only)",
+        description: "No completed results yet — exported headers only.",
+      });
+    } else {
+      toast({
+        title: "Export Complete",
+        description: artifact.filename 
+          ? `Downloaded ${displayFilename} (saved to server)`
+          : `Downloaded ${displayFilename}`,
+      });
+    }
     
     return { success: true, artifact };
   } catch (error) {

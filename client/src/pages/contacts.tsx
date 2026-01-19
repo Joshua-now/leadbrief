@@ -42,21 +42,13 @@ export default function ContactsPage() {
     setSelectedContactId(null);
   };
 
-  const handleExport = async (format: 'csv' | 'json') => {
-    if (!contacts?.length) {
-      toast({ 
-        title: "No Data to Export", 
-        description: "There are no contacts to export. Import some data first.", 
-        variant: "destructive" 
-      });
-      return;
-    }
-    
+  const handleExport = async (format: 'csv' | 'json', scope: 'full' | 'core' = 'full') => {
     setIsExporting(true);
+    const prefix = scope === 'core' ? 'core-' : '';
     const result = await exportFile({
-      endpoint: '/api/contacts/export',
+      endpoint: `/api/contacts/export?scope=${scope}`,
       format,
-      filename: `contacts-export.${format}`,
+      filename: `${prefix}contacts-export.${format}`,
     });
     setIsExporting(false);
     
@@ -169,10 +161,24 @@ export default function ContactsPage() {
               />
             </div>
             <Button 
+              variant="default" 
+              size="sm"
+              onClick={() => handleExport('csv', 'core')}
+              disabled={isExporting}
+              data-testid="button-export-core-contacts"
+            >
+              {isExporting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="mr-2 h-4 w-4" />
+              )}
+              Core CSV
+            </Button>
+            <Button 
               variant="outline" 
               size="sm"
-              onClick={() => handleExport('csv')}
-              disabled={isExporting || !contacts?.length}
+              onClick={() => handleExport('csv', 'full')}
+              disabled={isExporting}
               data-testid="button-export-contacts"
             >
               {isExporting ? (
@@ -180,7 +186,7 @@ export default function ContactsPage() {
               ) : (
                 <Download className="mr-2 h-4 w-4" />
               )}
-              {isExporting ? 'Exporting...' : 'Export CSV'}
+              Full CSV
             </Button>
             <Button variant="outline" size="icon" onClick={() => refetch()} data-testid="button-refresh">
               <RefreshCw className="h-4 w-4" />

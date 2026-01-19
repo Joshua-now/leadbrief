@@ -149,3 +149,55 @@ export function normalizeContactFields(contact: {
   
   return { emailNorm, domainNorm, phoneNorm, sourceHash };
 }
+
+/**
+ * Canonical contact normalization - single source of truth for all paths:
+ * import parsing, merge/dedup, and export
+ * 
+ * Returns normalized versions of all canonical fields:
+ * - email: lowercase
+ * - phone: E.164 format (+1XXXXXXXXXX) or digits-only
+ * - phoneDigits: digits only (for dedup matching)
+ * - website: https:// with no double protocol
+ * - city: titlecase
+ * - company_name: preserved (no case change, just trimmed)
+ * - domain: extracted from website for matching
+ */
+export interface NormalizedContact {
+  email: string | null;
+  phone: string | null;       // E.164 format preferred
+  phoneDigits: string | null; // Digits only for matching
+  website: string | null;     // https:// normalized
+  city: string | null;        // Titlecase
+  company_name: string | null; // Trimmed, original case
+  domain: string | null;      // Extracted for matching
+  sourceHash: string;
+}
+
+export function normalizeContact(contact: {
+  email?: string | null;
+  phone?: string | null;
+  website?: string | null;
+  city?: string | null;
+  company_name?: string | null;
+}): NormalizedContact {
+  const email = normalizeEmail(contact.email);
+  const phoneE164 = normalizePhoneE164(contact.phone);
+  const phoneDigits = normalizePhone(contact.phone);
+  const website = normalizeWebsiteUrl(contact.website);
+  const city = normalizeCity(contact.city);
+  const company_name = contact.company_name?.trim() || null;
+  const domain = normalizeDomain(contact.website);
+  const sourceHash = computeSourceHash(email, domain, phoneDigits);
+  
+  return {
+    email,
+    phone: phoneE164,
+    phoneDigits,
+    website,
+    city,
+    company_name,
+    domain,
+    sourceHash,
+  };
+}

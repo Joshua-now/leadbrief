@@ -3,12 +3,14 @@ import path from 'path';
 
 const EXPORTS_DIR = path.resolve(process.cwd(), 'attached_assets', 'exports');
 
+export type ExportEntityType = 'job' | 'contacts' | 'report' | 'core' | 'core-contacts';
+
 export interface ExportArtifactMetadata {
   filename: string;
   filePath: string;
   rowCount: number;
   createdAt: string;
-  entityType: 'job' | 'contacts' | 'report';
+  entityType: ExportEntityType;
   entityId?: string;
   size: number;
 }
@@ -43,7 +45,7 @@ export async function ensureExportsDirectory(): Promise<void> {
 
 export async function writeExportArtifact(
   csvContent: string,
-  entityType: 'job' | 'contacts' | 'report',
+  entityType: ExportEntityType,
   entityId?: string,
   rowCount: number = 0
 ): Promise<ExportArtifactMetadata | null> {
@@ -98,7 +100,7 @@ export async function listExportFiles(): Promise<ExportFile[]> {
         const filePath = path.join(EXPORTS_DIR, name);
         const stats = await fs.stat(filePath);
         
-        const match = name.match(/^export-(job|contacts|report)(?:-([a-f0-9-]+))?-(\d+)\.csv$/);
+        const match = name.match(/^export-(job|contacts|report|core|core-contacts)(?:-([a-f0-9-]+))?-(\d+)\.csv$/);
         
         exportFiles.push({
           name,
@@ -126,7 +128,7 @@ export async function listExportFiles(): Promise<ExportFile[]> {
 }
 
 export async function getExportFile(filename: string): Promise<{ content: Buffer; mimeType: string } | null> {
-  if (!/^export-(job|contacts|report)(?:-[a-f0-9-]+)?-\d+\.csv$/.test(filename)) {
+  if (!/^export-(job|contacts|report|core|core-contacts)(?:-[a-f0-9-]+)?-\d+\.csv$/.test(filename)) {
     console.warn(`[Export Artifacts] Invalid filename pattern: ${filename}`);
     return null;
   }

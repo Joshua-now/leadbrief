@@ -1288,67 +1288,89 @@ export async function registerRoutes(
   });
 
   // Export all contacts (CSV or JSON) - protected - MUST be before /api/contacts/:id
+  // Supports scope=core for canonical 5 fields only, or scope=full (default) for all fields
   app.get("/api/contacts/export", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const format = (req.query.format as string) || 'csv';
-      console.log(`[Export] Contacts export requested, format: ${format}`);
+      const scope = (req.query.scope as string) || 'full'; // 'full' or 'core'
+      console.log(`[Export] Contacts export requested, format: ${format}, scope: ${scope}`);
       
       const contacts = await storage.getContacts(500);
       console.log(`[Export] Contacts fetched: ${contacts.length}`);
       
-      // Return structured "no data" response
-      if (contacts.length === 0) {
-        console.log(`[Export] No contacts found for export`);
-        return res.status(200).json({
-          noData: true,
-          reason: "No contacts found in database",
-          counts: { total: 0 },
-          exportedAt: new Date().toISOString(),
-        });
-      }
+      // Define headers based on scope
+      const coreHeaders = ['company_name', 'city', 'email', 'phone', 'website', 'state', 'category'];
+      const fullHeaders = [
+        'first_name', 'last_name', 'email', 'phone', 'title',
+        'company_name', 'website', 'city', 'state', 'category',
+        'linkedin_url', 'data_quality_score'
+      ];
+      const headers = scope === 'core' ? coreHeaders : fullHeaders;
       
+      // Always return valid CSV with headers, even if empty (no silent fail)
       if (format === 'csv') {
-        const headers = [
-          'first_name', 'last_name', 'email', 'phone', 'title',
-          'company_name', 'website', 'city', 'state', 'category',
-          'linkedin_url', 'data_quality_score'
-        ];
-        
         const csvRows = [headers.join(',')];
         
         for (const contact of contacts) {
-          const row = [
-            escapeCSV(contact.firstName),
-            escapeCSV(contact.lastName),
-            escapeCSV(contact.email),
-            escapeCSV(contact.phone),
-            escapeCSV(contact.title),
-            escapeCSV(contact.companyName),
-            escapeCSV(contact.website),
-            escapeCSV(contact.city),
-            escapeCSV(contact.state),
-            escapeCSV(contact.category),
-            escapeCSV(contact.linkedinUrl),
-            contact.dataQualityScore?.toString() || '',
-          ];
+          let row: string[];
+          if (scope === 'core') {
+            row = [
+              escapeCSV(contact.companyName),
+              escapeCSV(contact.city),
+              escapeCSV(contact.email),
+              escapeCSV(contact.phone),
+              escapeCSV(contact.website),
+              escapeCSV(contact.state),
+              escapeCSV(contact.category),
+            ];
+          } else {
+            row = [
+              escapeCSV(contact.firstName),
+              escapeCSV(contact.lastName),
+              escapeCSV(contact.email),
+              escapeCSV(contact.phone),
+              escapeCSV(contact.title),
+              escapeCSV(contact.companyName),
+              escapeCSV(contact.website),
+              escapeCSV(contact.city),
+              escapeCSV(contact.state),
+              escapeCSV(contact.category),
+              escapeCSV(contact.linkedinUrl),
+              contact.dataQualityScore?.toString() || '',
+            ];
+          }
           csvRows.push(row.join(','));
         }
         
         const csvContent = csvRows.join('\n');
-        
-        const artifact = await writeExportArtifact(csvContent, 'contacts', undefined, contacts.length);
+        const filenamePrefix = scope === 'core' ? 'core-contacts' : 'contacts';
+        const artifact = await writeExportArtifact(csvContent, scope === 'core' ? 'core-contacts' : 'contacts', undefined, contacts.length);
         
         res.setHeader('Content-Type', 'text/csv');
-        res.setHeader('Content-Disposition', `attachment; filename="contacts-export.csv"`);
+        res.setHeader('Content-Disposition', `attachment; filename="${filenamePrefix}-export.csv"`);
+        res.setHeader('X-Export-Empty', contacts.length === 0 ? 'true' : 'false');
         if (artifact) {
           res.setHeader('X-Export-Filename', artifact.filename);
           res.setHeader('X-Export-Path', artifact.filePath);
           res.setHeader('X-Export-Rows', artifact.rowCount.toString());
         }
+        console.log(`[Export] Contacts CSV sent: ${contacts.length} rows, scope=${scope}`);
         res.send(csvContent);
       } else {
-        res.json({
-          contacts: contacts.map((c: typeof contacts[0]) => ({
+        // JSON export
+        const mappedContacts = contacts.map((c: typeof contacts[0]) => {
+          if (scope === 'core') {
+            return {
+              company_name: c.companyName ?? null,
+              city: c.city ?? null,
+              email: c.email ?? null,
+              phone: c.phone ?? null,
+              website: c.website ?? null,
+              state: c.state ?? null,
+              category: c.category ?? null,
+            };
+          }
+          return {
             first_name: c.firstName,
             last_name: c.lastName,
             email: c.email,
@@ -1361,14 +1383,19 @@ export async function registerRoutes(
             category: c.category,
             linkedin_url: c.linkedinUrl,
             data_quality_score: c.dataQualityScore,
-          })),
+          };
+        });
+        
+        res.json({
+          scope,
+          contacts: mappedContacts,
           count: contacts.length,
           exportedAt: new Date().toISOString(),
         });
       }
     } catch (error) {
       console.error("Contacts export error:", error);
-      res.status(500).json({ error: "Export failed" });
+      res.status(500).json({ error: "Export failed", code: 500 });
     }
   });
 
@@ -1907,6 +1934,7 @@ export async function registerRoutes(
         
         res.setHeader('Content-Type', 'text/csv');
         res.setHeader('Content-Disposition', `attachment; filename="${filenamePrefix}-${id}.csv"`);
+        res.setHeader('X-Export-Empty', exportRecords.length === 0 ? 'true' : 'false');
         if (artifact) {
           res.setHeader('X-Export-Filename', artifact.filename);
           res.setHeader('X-Export-Path', artifact.filePath);
