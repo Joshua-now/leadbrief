@@ -1073,7 +1073,10 @@ export async function registerRoutes(
   app.get("/api/contacts/export", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const format = (req.query.format as string) || 'csv';
+      console.log(`[Export] Contacts export requested, format: ${format}`);
+      
       const contacts = await storage.getContacts(500);
+      console.log(`[Export] Contacts fetched: ${contacts.length}`);
       
       if (format === 'csv') {
         const headers = [
@@ -1419,20 +1422,30 @@ export async function registerRoutes(
       const { id } = req.params;
       const format = (req.query.format as string) || 'json';
       
+      console.log(`[Export] Job export requested: ${id}, format: ${format}`);
+      
       if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+        console.log(`[Export] Invalid job ID format: ${id}`);
         return res.status(400).json({ error: "Invalid job ID format" });
       }
 
       const job = await storage.getBulkJob(id);
       if (!job) {
+        console.log(`[Export] Job not found: ${id}`);
         return res.status(404).json({ error: "Job not found" });
       }
 
+      console.log(`[Export] Job found: ${job.name}, status: ${job.status}, totalRecords: ${job.totalRecords}, successful: ${job.successful}`);
+
       const items = await storage.getBulkJobItems(id);
+      console.log(`[Export] Total items fetched: ${items.length}, statuses: ${[...new Set(items.map(i => i.status))].join(', ')}`);
+
       
       // Build export records with required fields
-      const exportRecords = items
-        .filter(item => item.status === 'complete')
+      const filteredItems = items.filter(item => item.status === 'complete' || item.status === 'completed');
+      console.log(`[Export] Filtered items (complete/completed): ${filteredItems.length} of ${items.length}`);
+      
+      const exportRecords = filteredItems
         .map(item => {
           const parsed = item.parsedData as Record<string, string> | null;
           const enrichment = item.enrichmentData as Record<string, unknown> | null;

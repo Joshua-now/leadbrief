@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { exportFile } from "@/lib/export-utils";
 import type { Contact } from "@shared/schema";
 
 export default function ContactsPage() {
@@ -31,54 +32,15 @@ export default function ContactsPage() {
     }
     
     setIsExporting(true);
-    try {
-      const response = await fetch(`/api/contacts/export?format=${format}`, {
-        method: 'GET',
-        credentials: 'include',
-      });
-      
-      if (response.status === 401) {
-        toast({ 
-          title: "Session Expired", 
-          description: "Please log in again to export data.", 
-          variant: "destructive" 
-        });
-        setIsExporting(false);
-        return;
-      }
-      if (response.status === 500) {
-        toast({ 
-          title: "Server Error", 
-          description: "Export failed. Please try again or check server logs.", 
-          variant: "destructive" 
-        });
-        setIsExporting(false);
-        return;
-      }
-      if (!response.ok) {
-        const errorBody = await response.json().catch(() => ({}));
-        throw new Error(errorBody.error || `Export failed (${response.status})`);
-      }
-      
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `contacts-export.${format}`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-      toast({ title: "Export Complete", description: "File downloaded successfully" });
-    } catch (error) {
-      console.error('Export error:', error);
-      toast({ 
-        title: "Export Failed", 
-        description: error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.', 
-        variant: "destructive" 
-      });
-    } finally {
-      setIsExporting(false);
+    const result = await exportFile({
+      endpoint: '/api/contacts/export',
+      format,
+      filename: `contacts-export.${format}`,
+    });
+    setIsExporting(false);
+    
+    if (!result.success) {
+      console.error('[Contacts Export] Failed:', result.error);
     }
   };
 

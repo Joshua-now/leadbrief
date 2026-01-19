@@ -9,6 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { exportFile } from "@/lib/export-utils";
 import type { BulkJob } from "@shared/schema";
 
 const statusConfig: Record<string, { icon: React.ElementType; color: string; label: string }> = {
@@ -195,8 +196,6 @@ export default function JobsPage() {
                 job={job} 
                 onRetry={() => retryMutation.mutate(job.id)}
                 isRetrying={retryMutation.isPending}
-                onExportSuccess={() => toast({ title: "Export Complete", description: "File downloaded successfully" })}
-                onExportError={(error) => toast({ title: "Export Failed", description: error, variant: "destructive" })}
               />
             ))}
           </div>
@@ -206,14 +205,13 @@ export default function JobsPage() {
   );
 }
 
-function JobCard({ job, onRetry, isRetrying, onExportSuccess, onExportError }: { 
+function JobCard({ job, onRetry, isRetrying }: { 
   job: BulkJob; 
   onRetry: () => void; 
   isRetrying: boolean;
-  onExportSuccess: () => void;
-  onExportError: (error: string) => void;
 }) {
   const [isExporting, setIsExporting] = useState(false);
+  const { toast } = useToast();
   const status = statusConfig[job.status || "pending"] || statusConfig.pending;
   const StatusIcon = status.icon;
   const progress = job.totalRecords
@@ -225,52 +223,24 @@ function JobCard({ job, onRetry, isRetrying, onExportSuccess, onExportError }: {
 
   const handleExport = async (format: 'csv' | 'json') => {
     if ((job.successful || 0) === 0) {
-      onExportError('No completed records to export. Process some records first.');
+      toast({ 
+        title: "No Data to Export", 
+        description: "No completed records to export. Process some records first.", 
+        variant: "destructive" 
+      });
       return;
     }
     
     setIsExporting(true);
-    try {
-      const response = await fetch(`/api/jobs/${job.id}/export?format=${format}`, {
-        method: 'GET',
-        credentials: 'include',
-      });
-      
-      if (response.status === 401) {
-        onExportError('Session expired - please log in again to export data.');
-        setIsExporting(false);
-        return;
-      }
-      if (response.status === 404) {
-        onExportError('Job not found. It may have been deleted.');
-        setIsExporting(false);
-        return;
-      }
-      if (response.status === 500) {
-        onExportError('Server error - please try again or check server logs.');
-        setIsExporting(false);
-        return;
-      }
-      if (!response.ok) {
-        const errorBody = await response.json().catch(() => ({}));
-        throw new Error(errorBody.error || `Export failed (${response.status})`);
-      }
-      
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `export-${job.id}.${format}`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-      onExportSuccess();
-    } catch (error) {
-      console.error('Export error:', error);
-      onExportError(error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.');
-    } finally {
-      setIsExporting(false);
+    const result = await exportFile({
+      endpoint: `/api/jobs/${job.id}/export`,
+      format,
+      filename: `export-${job.id}.${format}`,
+    });
+    setIsExporting(false);
+    
+    if (!result.success) {
+      console.error(`[Job ${job.id} Export] Failed:`, result.error);
     }
   };
 
