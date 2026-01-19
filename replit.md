@@ -137,8 +137,10 @@ The backend uses a modular route registration pattern with dedicated storage abs
 | `/api/debug/export-health` | GET | Export health check (protected) - returns DB counts, dedupe stats, data quality metrics |
 | `/api/finalcheck` | GET | Comprehensive verification (tests health, ready, intake auth, DB write) |
 | `/api/config/limits` | GET | Get import limits |
-| `/api/jobs/:id/export` | GET | Export job results (CSV/JSON) - returns structured noData response if empty |
-| `/api/contacts/export` | GET | Export all contacts (CSV/JSON) - returns structured noData response if empty |
+| `/api/jobs/:id/export` | GET | Export job results (CSV/JSON) - writes to attached_assets/exports/, sets X-Export-* headers |
+| `/api/contacts/export` | GET | Export all contacts (CSV/JSON) - writes to attached_assets/exports/, sets X-Export-* headers |
+| `/api/exports` | GET | List recent export files (protected) - returns JSON with exports array |
+| `/api/exports/:filename` | GET | Download a previously generated export file (protected) |
 | `/api/auth/user` | GET | Get current authenticated user |
 | `/api/settings` | GET/POST | User settings (protected) |
 | `/api/login` | GET | Initiate Replit Auth login |
