@@ -1,20 +1,16 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
-import { getAccessToken, ensureSupabaseConfigured } from "./supabase";
-import { triggerSessionExpired, trySilentRefresh } from "@/lib/session-manager";
+import { getAccessToken, refreshSession, isSupabaseConfigured } from "./supabase";
+import { triggerSessionExpired } from "@/lib/session-manager";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
-    // Don't trigger session expired here - let the caller handle 401 with retry
     const text = (await res.text()) || res.statusText;
     throw new Error(`${res.status}: ${text}`);
   }
 }
 
-// Get authorization headers for API requests
 async function getAuthHeaders(): Promise<HeadersInit> {
-  // Ensure Supabase config is loaded, then add Bearer token if configured
-  const isConfigured = await ensureSupabaseConfigured();
-  if (isConfigured) {
+  if (isSupabaseConfigured()) {
     const token = await getAccessToken();
     if (token) {
       return { Authorization: `Bearer ${token}` };
@@ -45,18 +41,17 @@ export async function apiRequest(
   
   let res = await makeRequest();
   
-  // On 401, try silent refresh first
-  if (res.status === 401) {
+  if (res.status === 401 && isSupabaseConfigured()) {
     console.log(`[API] Got 401 on ${method} ${url}, attempting silent refresh...`);
-    const refreshed = await trySilentRefresh();
+    const refreshed = await refreshSession();
     
     if (refreshed) {
       console.log(`[API] Session refreshed, retrying request...`);
       res = await makeRequest();
     }
     
-    // If still 401 after refresh, trigger session expired
     if (res.status === 401) {
+      console.log(`[API] Still 401 after refresh, triggering session expired`);
       triggerSessionExpired();
     }
   }
@@ -83,18 +78,17 @@ export const getQueryFn: <T>(options: {
     
     let res = await makeRequest();
 
-    // On 401, try silent refresh first - NO UI interruption
-    if (res.status === 401) {
+    if (res.status === 401 && isSupabaseConfigured()) {
       console.log(`[Query] Got 401 on ${url}, attempting silent refresh...`);
-      const refreshed = await trySilentRefresh();
+      const refreshed = await refreshSession();
       
       if (refreshed) {
         console.log(`[Query] Session refreshed, retrying query...`);
         res = await makeRequest();
       }
       
-      // If still 401 after refresh attempt
       if (res.status === 401) {
+        console.log(`[Query] Still 401 after refresh, triggering session expired`);
         triggerSessionExpired();
         if (unauthorizedBehavior === "returnNull") {
           return null;

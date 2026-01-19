@@ -1,5 +1,5 @@
 import { toast } from "@/hooks/use-toast";
-import { triggerSessionExpired, trySilentRefresh } from "@/lib/session-manager";
+import { apiGet } from "@/lib/apiClient";
 
 export interface ExportOptions {
   endpoint: string;
@@ -12,47 +12,18 @@ export interface ExportResult {
   error?: string;
 }
 
-async function fetchWithAuth(url: string): Promise<Response> {
-  return fetch(url, {
-    method: 'GET',
-    credentials: 'include',
-  });
-}
-
 export async function exportFile(options: ExportOptions): Promise<ExportResult> {
   const { endpoint, format, filename } = options;
   
-  // Properly handle URLs that may already have query parameters
   const separator = endpoint.includes('?') ? '&' : '?';
   const url = `${endpoint}${separator}format=${format}`;
   
   console.log(`[Export] Starting export: ${url}`);
   
   try {
-    let response = await fetchWithAuth(url);
+    const response = await apiGet(url);
     
     console.log(`[Export] Response status: ${response.status} ${response.statusText}`);
-    
-    // On 401, try silent refresh first - NO UI interruption yet
-    if (response.status === 401) {
-      console.log(`[Export] Got 401, attempting silent session refresh...`);
-      
-      const refreshed = await trySilentRefresh();
-      
-      if (refreshed) {
-        // Session refreshed successfully, retry the request silently
-        console.log(`[Export] Session refreshed, retrying request...`);
-        response = await fetchWithAuth(url);
-        console.log(`[Export] Retry response status: ${response.status} ${response.statusText}`);
-      }
-      
-      // If still 401 after refresh attempt, then show session expired
-      if (response.status === 401) {
-        console.error(`[Export] Auth failed after refresh attempt`);
-        triggerSessionExpired();
-        return { success: false, error: 'Session expired' };
-      }
-    }
     
     if (response.status === 404) {
       const errorMsg = 'Resource not found (404). It may have been deleted.';

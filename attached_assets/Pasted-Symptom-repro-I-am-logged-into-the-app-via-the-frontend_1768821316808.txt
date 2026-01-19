@@ -1,0 +1,115 @@
+Symptom (repro)
+
+I am logged into the app via the frontend (Supabase login works).
+
+I go to Jobs and click an action button (export/view/etc).
+
+UI pops: “Your session has expired, please log in again.”
+
+I log out, log back in, try again → same error.
+
+So the backend/API is treating authenticated users as unauthenticated for these requests.
+
+Goal
+While the user is logged in, Jobs actions must work without any “session expired” prompts. Only show login prompt if the session truly cannot be refreshed.
+
+1) Identify the actual auth mechanism and standardize it
+
+Right now auth is inconsistent between UI and API calls.
+
+Pick ONE of these and apply everywhere:
+
+Option A: Supabase JWT header auth (recommended)
+
+For every /api/* request, attach:
+
+Authorization: `Bearer ${access_token}`
+
+
+Retrieve token via:
+
+const { data } = await supabase.auth.getSession();
+const token = data.session?.access_token;
+
+
+Option B: Cookie-based auth
+
+For every fetch() to /api/*, include:
+
+credentials: "include"
+
+
+and confirm cookies are actually being set and sent.
+
+Do NOT mix approaches. Make one apiClient.ts used for all calls.
+
+2) Fix the Jobs button(s) to use the shared api client
+
+Audit Jobs page buttons and ensure they do NOT call fetch() directly or use window.location to a protected endpoint.
+
+All actions must go through the same authenticated client.
+
+3) Implement silent refresh + retry on 401 (no user disruption)
+
+If any /api/* request returns 401:
+
+silently run:
+
+await supabase.auth.refreshSession()
+
+
+re-read token
+
+retry the request once
+
+ONLY if retry still fails, then show:
+
+“Session expired — please log in again”
+
+No modal/toast on the first 401. No infinite loops.
+
+4) Fix backend to return clean 401 (no provider guidance JSON)
+
+Backend must return:
+
+{ "error": "Unauthorized" }
+
+
+with status 401.
+
+Do NOT return:
+
+{"provider":"supabase","message":"Use the frontend login form..."}
+
+
+to the UI. That message should never surface to the user.
+
+5) Add a debug endpoint + logs to confirm what’s wrong in production
+
+Add a protected endpoint:
+GET /api/debug/whoami
+that returns:
+
+authenticated user id/email
+
+whether request had Authorization header
+
+whether cookie session exists (if applicable)
+
+Add server logs on auth failure:
+
+path
+
+whether Authorization header was present
+
+why validation failed (expired token / missing token / invalid signature)
+
+6) Acceptance Criteria (must pass on Railway prod)
+
+Logged-in user clicks Jobs buttons → works (200), no “session expired”
+
+If token is expired → refresh + retry works silently
+
+Only truly logged-out users are prompted to log in
+
+This works consistently across Jobs / Contacts / Reports export/actions
