@@ -1,0 +1,55 @@
+We are finally generating exports, but they are low quality and repetitive. Please improve the report/export pipeline so output is “clean and useful,” not filler.
+
+Problems:
+
+personalization bullets are generic and identical across all rows (“Based in Orlando… professional services”)
+
+website/category/services/email/title are mostly empty
+
+confidence_score appears hard-coded at 0.25
+
+duplicates exist (same company_name/city multiple times)
+
+Required fixes:
+
+Deduplicate leads before export using: phone_norm > domain_norm > (company_name_norm + city). Export one canonical row and optionally mark duplicates.
+
+Implement report quality tiers:
+
+Tier 0 (only name/city/phone): do NOT generate fake bullets; leave bullets blank or “needs enrichment”
+
+Tier 1 (has website/domain): generate bullets from page title/meta/H1 + detected service keywords
+
+Tier 2 (has website + enrichment): generate strong bullets + icebreaker
+
+Replace generic bullets with computed bullets derived from real fields (services/category/reviews/keywords). If no signal exists, do not invent it.
+
+Make confidence_score computed from available signals (name/website/services/sources). Include confidence rationale that reflects actual data.
+
+Ensure scrape_url, scrape_status, and scrape_sources are populated for each row when scraping runs.
+
+Update the “icebreaker” to reference at least one real signal (service, keyword, review, USP). If none, leave it blank instead of generic.
+
+Acceptance criteria:
+
+No repeated filler bullets across different companies
+
+Duplicates removed/marked
+
+Confidence varies based on data present
+
+Exports are human-usable for outreach
+
+One more thing (important)
+
+If you want “clean reports,” you need one enrichment step that reliably finds a website/domain.
+
+Even a simple “domain guess + verify” step will transform output quality:
+
+try company_name + city search → get top domain
+
+store it
+
+scrape that domain for keywords/services
+
+Once websites fill in, your reports will instantly stop looking generic.

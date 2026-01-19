@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import Papa from 'papaparse';
+import { normalizePhone as normPhone, normalizeCompany as normCompany } from './normalize';
 
 // Constants for guard rails
 export const IMPORT_LIMITS = {
@@ -90,6 +91,8 @@ export class BulkInputHandler {
     const warnings: string[] = [];
     const invalidRows = new Set<number>();
     const seenEmails = new Set<string>();
+    const seenPhones = new Set<string>();
+    const seenCompanyCities = new Set<string>();
 
     // Guard rail: Check content size
     const sizeInMB = Buffer.byteLength(csvContent, 'utf8') / (1024 * 1024);
@@ -143,9 +146,22 @@ export class BulkInputHandler {
         mapped.phone = normalizePhone(mapped.phone);
       }
       
-      // Deduplicate within import
+      // Deduplicate within import: phone_norm > email > company+city
+      const phoneNorm = mapped.phone ? normPhone(mapped.phone) : null;
+      const companyNorm = mapped.company ? normCompany(mapped.company) : null;
+      const cityNorm = mapped.city ? mapped.city.toLowerCase().trim() : null;
+      const companyCityKey = companyNorm && cityNorm ? `${companyNorm}|${cityNorm}` : null;
+      
       if (mapped.email && seenEmails.has(mapped.email)) {
-        warnings.push(`Row ${rowNum}: Duplicate email "${mapped.email}" within import - skipped`);
+        warnings.push(`Row ${rowNum}: Duplicate email "${mapped.email}" - skipped`);
+        return;
+      }
+      if (phoneNorm && seenPhones.has(phoneNorm)) {
+        warnings.push(`Row ${rowNum}: Duplicate phone "${mapped.phone}" - skipped`);
+        return;
+      }
+      if (companyCityKey && seenCompanyCities.has(companyCityKey)) {
+        warnings.push(`Row ${rowNum}: Duplicate company+city "${mapped.company}, ${mapped.city}" - skipped`);
         return;
       }
       
@@ -155,6 +171,12 @@ export class BulkInputHandler {
         records.push(result.data);
         if (result.data.email) {
           seenEmails.add(result.data.email);
+        }
+        if (phoneNorm) {
+          seenPhones.add(phoneNorm);
+        }
+        if (companyCityKey) {
+          seenCompanyCities.add(companyCityKey);
         }
       } else {
         invalidRows.add(rowNum);
@@ -240,6 +262,8 @@ export class BulkInputHandler {
     const errors: ImportResult['errors'] = [];
     const warnings: string[] = [];
     const seenEmails = new Set<string>();
+    const seenPhones = new Set<string>();
+    const seenCompanyCities = new Set<string>();
     let invalidCount = 0;
 
     // Guard rail: Check content size
@@ -272,9 +296,22 @@ export class BulkInputHandler {
           mapped.phone = normalizePhone(mapped.phone);
         }
 
-        // Deduplicate within import
+        // Deduplicate within import: phone_norm > email > company+city
+        const phoneNorm = mapped.phone ? normPhone(mapped.phone) : null;
+        const companyNorm = mapped.company ? normCompany(mapped.company) : null;
+        const cityNorm = mapped.city ? mapped.city.toLowerCase().trim() : null;
+        const companyCityKey = companyNorm && cityNorm ? `${companyNorm}|${cityNorm}` : null;
+        
         if (mapped.email && seenEmails.has(mapped.email)) {
           warnings.push(`Record ${idx + 1}: Duplicate email "${mapped.email}" - skipped`);
+          return;
+        }
+        if (phoneNorm && seenPhones.has(phoneNorm)) {
+          warnings.push(`Record ${idx + 1}: Duplicate phone - skipped`);
+          return;
+        }
+        if (companyCityKey && seenCompanyCities.has(companyCityKey)) {
+          warnings.push(`Record ${idx + 1}: Duplicate company+city - skipped`);
           return;
         }
 
@@ -284,6 +321,12 @@ export class BulkInputHandler {
           records.push(result.data);
           if (result.data.email) {
             seenEmails.add(result.data.email);
+          }
+          if (phoneNorm) {
+            seenPhones.add(phoneNorm);
+          }
+          if (companyCityKey) {
+            seenCompanyCities.add(companyCityKey);
           }
         } else {
           invalidCount++;

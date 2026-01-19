@@ -1520,7 +1520,7 @@ export async function registerRoutes(
       console.log(`[Export] Job found: ${job.name}, status: ${job.status}, totalRecords: ${job.totalRecords}, successful: ${job.successful}`);
 
       const items = await storage.getBulkJobItems(id);
-      console.log(`[Export] Total items fetched: ${items.length}, statuses: ${[...new Set(items.map(i => i.status))].join(', ')}`);
+      console.log(`[Export] Total items fetched: ${items.length}, statuses: ${Array.from(new Set(items.map(i => i.status))).join(', ')}`);
 
       
       // Build export records with required fields
@@ -1529,7 +1529,8 @@ export async function registerRoutes(
       
       // Group items by status for debugging
       const statusCounts = items.reduce((acc, item) => {
-        acc[item.status] = (acc[item.status] || 0) + 1;
+        const status = item.status || 'unknown';
+        acc[status] = (acc[status] || 0) + 1;
         return acc;
       }, {} as Record<string, number>);
       console.log(`[Export] Status breakdown:`, JSON.stringify(statusCounts));
@@ -1556,31 +1557,63 @@ export async function registerRoutes(
         });
       }
       
-      const exportRecords = filteredItems
-        .map(item => {
-          const parsed = item.parsedData as Record<string, string> | null;
-          const enrichment = item.enrichmentData as Record<string, unknown> | null;
-          const sources = item.scrapeSources as Array<{ url: string; statusCode: number; success: boolean; error?: string }> | null;
-          
-          return {
-            company_name: enrichment?.companyName || parsed?.company || parsed?.companyName || null,
-            website: parsed?.companyDomain || parsed?.websiteUrl || parsed?.website || null,
-            city: enrichment?.city || parsed?.city || null,
-            state: enrichment?.state || null,
-            category: enrichment?.industry || null,
-            services: (enrichment?.services as string[])?.join(', ') || null,
-            personalization_bullets: item.personalizationBullets || [],
-            icebreaker: item.icebreaker || null,
-            confidence_score: item.confidenceScore ? parseFloat(item.confidenceScore) : 0,
-            confidence_rationale: item.confidenceRationale || null,
-            scrape_sources: sources || [],
-            email: parsed?.email || null,
-            phone: parsed?.phone || null,
-            first_name: parsed?.firstName || null,
-            last_name: parsed?.lastName || null,
-            title: parsed?.title || null,
-          };
-        });
+      // Build raw export records
+      const rawRecords = filteredItems.map(item => {
+        const parsed = item.parsedData as Record<string, string> | null;
+        const enrichment = item.enrichmentData as Record<string, unknown> | null;
+        const sources = item.scrapeSources as Array<{ url: string; statusCode: number; success: boolean; error?: string }> | null;
+        const domainDiscovery = enrichment?.domainDiscovery as { domain?: string; source?: string; verified?: boolean } | null;
+        
+        return {
+          company_name: enrichment?.companyName || parsed?.company || parsed?.companyName || null,
+          website: domainDiscovery?.domain || parsed?.companyDomain || parsed?.websiteUrl || parsed?.website || null,
+          city: enrichment?.city || parsed?.city || null,
+          state: enrichment?.state || null,
+          category: enrichment?.industry || null,
+          services: (enrichment?.services as string[])?.join(', ') || null,
+          personalization_bullets: item.personalizationBullets || [],
+          icebreaker: item.icebreaker || null,
+          confidence_score: item.confidenceScore ? parseFloat(item.confidenceScore) : 0,
+          confidence_rationale: item.confidenceRationale || null,
+          scrape_sources: sources || [],
+          email: parsed?.email || null,
+          phone: parsed?.phone || null,
+          first_name: parsed?.firstName || null,
+          last_name: parsed?.lastName || null,
+          title: parsed?.title || null,
+        };
+      });
+      
+      // Deduplicate export records: phone > email > company+city
+      const seen = new Set<string>();
+      const exportRecords = rawRecords.filter(record => {
+        const phoneNorm = typeof record.phone === 'string' ? record.phone.replace(/\D/g, '') : null;
+        const companyNorm = typeof record.company_name === 'string' ? record.company_name.toLowerCase().trim() : null;
+        const cityNorm = typeof record.city === 'string' ? record.city.toLowerCase().trim() : null;
+        
+        // Check by phone
+        if (phoneNorm && phoneNorm.length >= 7) {
+          if (seen.has(`phone:${phoneNorm}`)) return false;
+          seen.add(`phone:${phoneNorm}`);
+        }
+        
+        // Check by email
+        if (record.email) {
+          if (seen.has(`email:${record.email.toLowerCase()}`)) return false;
+          seen.add(`email:${record.email.toLowerCase()}`);
+        }
+        
+        // Check by company+city
+        if (companyNorm && cityNorm) {
+          const key = `company:${companyNorm}|${cityNorm}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+        }
+        
+        return true;
+      });
+      
+      console.log(`[Export] Deduplicated: ${rawRecords.length} -> ${exportRecords.length} records`);
 
       if (format === 'csv') {
         // Generate CSV

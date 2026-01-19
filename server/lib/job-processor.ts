@@ -2,6 +2,7 @@ import { storage } from "../storage";
 import { scrapeWebsite, type ScrapeResult, type ScrapeSource } from "./scraper";
 import { extractBusinessIntelligence, calculateConfidenceScore } from "./content-parser";
 import { generatePersonalization } from "./personalization";
+import { discoverDomain } from "./domain-discovery";
 
 // Track jobs currently being processed to prevent concurrent execution
 const processingJobs = new Set<string>();
@@ -85,26 +86,37 @@ async function processItem(
 
   const companyName = data.company || data.companyName;
 
-  // STEP 1: Scrape website if available
-  const websiteUrl = data.companyDomain || data.websiteUrl || data.website || data.url;
+  // STEP 1: Domain discovery - try to find a website if not provided
+  const domainResult = await discoverDomain(data);
+  let discoveredDomain = domainResult.domain;
+  const domainSource = domainResult.source;
+  
+  // Use discovered domain or fall back to input
+  const websiteUrl = discoveredDomain 
+    ? `https://${discoveredDomain}` 
+    : (data.companyDomain || data.websiteUrl || data.website || data.url || null);
+  
+  // STEP 2: Scrape website if available
   let scrapeResult: ScrapeResult = {
     success: false,
     sources: [],
-    error: 'No website URL provided',
+    error: 'No website URL available',
   };
   
   if (websiteUrl) {
-    console.log(`[Enrichment] Scraping website for item ${item.id}: ${websiteUrl}`);
+    console.log(`[Enrichment] Scraping website for item ${item.id}: ${websiteUrl} (source: ${domainSource})`);
     scrapeResult = await scrapeWebsite(websiteUrl);
+  } else {
+    console.log(`[Enrichment] No website found for item ${item.id}, skipping scrape`);
   }
 
-  // STEP 2: Extract business intelligence from scraped content
+  // STEP 3: Extract business intelligence from scraped content
   const businessIntel = extractBusinessIntelligence(scrapeResult, data);
   
-  // STEP 3: Generate personalization based on scraped content
+  // STEP 4: Generate personalization based on scraped content
   const personalization = generatePersonalization(businessIntel, scrapeResult, data);
   
-  // STEP 4: Calculate confidence score
+  // STEP 5: Calculate confidence score
   const { score: confidenceScore, rationale: confidenceRationale } = calculateConfidenceScore(
     scrapeResult,
     businessIntel,
@@ -174,6 +186,12 @@ async function processItem(
     contactInfo: businessIntel.contactInfo,
     websiteTitle: scrapeResult.content?.title || null,
     websiteDescription: scrapeResult.content?.description || null,
+    domainDiscovery: {
+      domain: domainResult.domain,
+      source: domainResult.source,
+      verified: domainResult.verified,
+    },
+    personalizationTier: personalization.tier,
   };
 
   // Update job item with full enrichment data
