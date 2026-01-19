@@ -2,33 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { User } from "@shared/models/auth";
 import { getAccessToken, ensureSupabaseConfigured, signOut } from "@/lib/supabase";
 
-async function fetchUser(): Promise<User | null> {
-  const headers: HeadersInit = {};
-  
-  // Ensure Supabase config is loaded, then add Bearer token if configured
-  const isConfigured = await ensureSupabaseConfigured();
-  if (isConfigured) {
-    const token = await getAccessToken();
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-  }
-  
-  const response = await fetch("/api/auth/user", {
-    credentials: "include",
-    headers,
-  });
-
-  if (response.status === 401) {
-    return null;
-  }
-
-  if (!response.ok) {
-    throw new Error(`${response.status}: ${response.statusText}`);
-  }
-
-  return response.json();
-}
+const AUTH_QUERY_KEY = ["/api/auth/user"] as const;
 
 async function logout(): Promise<void> {
   // Clear Supabase session first (if configured), then redirect to server logout
@@ -50,9 +24,41 @@ async function logout(): Promise<void> {
 
 export function useAuth() {
   const queryClient = useQueryClient();
+  
   const { data: user, isLoading } = useQuery<User | null>({
-    queryKey: ["/api/auth/user"],
-    queryFn: fetchUser,
+    queryKey: AUTH_QUERY_KEY,
+    queryFn: async () => {
+      const headers: HeadersInit = {};
+      
+      const isConfigured = await ensureSupabaseConfigured();
+      if (isConfigured) {
+        const token = await getAccessToken();
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+      }
+      
+      const response = await fetch("/api/auth/user", {
+        credentials: "include",
+        headers,
+        cache: "no-store",
+      });
+
+      if (response.status === 401) {
+        return null;
+      }
+
+      // Handle 304 Not Modified - reuse cached data
+      if (response.status === 304) {
+        return queryClient.getQueryData<User | null>(AUTH_QUERY_KEY) ?? null;
+      }
+
+      if (!response.ok) {
+        throw new Error(`${response.status}: ${response.statusText}`);
+      }
+
+      return response.json();
+    },
     retry: false,
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
@@ -60,7 +66,7 @@ export function useAuth() {
   const logoutMutation = useMutation({
     mutationFn: logout,
     onSuccess: () => {
-      queryClient.setQueryData(["/api/auth/user"], null);
+      queryClient.setQueryData(AUTH_QUERY_KEY, null);
     },
   });
 
