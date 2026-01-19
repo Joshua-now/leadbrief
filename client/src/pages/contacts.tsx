@@ -43,6 +43,7 @@ export default function ContactsPage() {
           description: "Please log in again to export data.", 
           variant: "destructive" 
         });
+        setIsExporting(false);
         return;
       }
       if (response.status === 500) {
@@ -51,6 +52,7 @@ export default function ContactsPage() {
           description: "Export failed. Please try again or check server logs.", 
           variant: "destructive" 
         });
+        setIsExporting(false);
         return;
       }
       if (!response.ok) {

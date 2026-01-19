@@ -225,14 +225,17 @@ function JobCard({ job, onRetry, isRetrying, onExportSuccess, onExportError }: {
       
       if (response.status === 401) {
         onExportError('Session expired - please log in again to export data.');
+        setIsExporting(false);
         return;
       }
       if (response.status === 404) {
         onExportError('Job not found. It may have been deleted.');
+        setIsExporting(false);
         return;
       }
       if (response.status === 500) {
         onExportError('Server error - please try again or check server logs.');
+        setIsExporting(false);
         return;
       }
       if (!response.ok) {
