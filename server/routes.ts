@@ -995,29 +995,30 @@ export async function registerRoutes(
 
       for (const lead of leads) {
         try {
-          // Extract all fields with comprehensive aliases
+          // Extract all fields with comprehensive aliases (supporting both camelCase and snake_case)
           const { 
-            email, phone, firstName, lastName, company, title, linkedinUrl, 
-            ghlContactId, leadName, companyName, websiteUrl, website, domain, site,
+            email, phone, firstName, first_name, lastName, last_name, company, title, linkedinUrl, linkedin_url,
+            ghlContactId, leadName, lead_name, companyName, company_name, websiteUrl, website_url, website, domain, site,
             city, state, address, formatted_address, full_address,
             category, type, primary_category, business_type, industry,
             place_name, business_name, business
           } = lead;
 
-          // Normalize fields with fallback aliases
+          // Normalize fields with fallback aliases (supporting both camelCase and snake_case)
           const contactEmail = email?.toLowerCase()?.trim();
           const contactPhone = phone?.trim();
-          const contactFirstName = (firstName || (leadName?.split(" ")[0]))?.trim();
-          const contactLastName = (lastName || (leadName?.split(" ").slice(1).join(" ")))?.trim();
-          const contactCompany = (company || companyName || place_name || business_name || business)?.trim();
-          const contactWebsite = (websiteUrl || website || domain || site)?.trim();
+          const contactFirstName = (firstName || first_name || ((leadName || lead_name)?.split(" ")[0]))?.trim();
+          const contactLastName = (lastName || last_name || ((leadName || lead_name)?.split(" ").slice(1).join(" ")))?.trim();
+          const contactCompany = (company || companyName || company_name || place_name || business_name || business)?.trim();
+          const contactWebsite = (websiteUrl || website_url || website || domain || site)?.trim();
           const contactCity = city?.trim();
           const contactState = state?.trim();
           const contactAddress = (address || formatted_address || full_address)?.trim();
           const contactCategory = (category || type || primary_category || business_type || industry)?.trim();
+          const contactLinkedin = (linkedinUrl || linkedin_url)?.trim();
 
           // Allow website+company as valid identifier
-          if (!contactEmail && !contactPhone && !linkedinUrl && !contactWebsite) {
+          if (!contactEmail && !contactPhone && !contactLinkedin && !contactWebsite) {
             results.push({ success: false, email: contactEmail, error: "Email, phone, LinkedIn URL, or website required" });
             continue;
           }
@@ -1052,7 +1053,7 @@ export async function registerRoutes(
             address: contactAddress?.slice(0, 500) || null,
             category: contactCategory?.slice(0, 200) || null,
             companyId,
-            linkedinUrl: linkedinUrl?.slice(0, 500) || null,
+            linkedinUrl: contactLinkedin?.slice(0, 500) || null,
           }, 'intake');
 
           results.push({ 
@@ -1080,16 +1081,41 @@ export async function registerRoutes(
         completedAt: new Date(),
       });
 
-      // Create job items for successful contacts
+      // Create job items for successful contacts with full parsed data
       const jobItems = results
         .filter(r => r.success && r.contactId)
-        .map((r, idx) => ({
-          bulkJobId: job.id,
-          rowNumber: idx + 1,
-          status: "complete" as const,
-          parsedData: JSON.parse(JSON.stringify({ email: r.email })),
-          contactId: r.contactId!,
-        }));
+        .map((r, idx) => {
+          const lead = leads[Array.isArray(req.body) ? results.indexOf(r) : 0];
+          const itemCompany = (lead.company || lead.companyName || lead.company_name || lead.place_name || lead.business_name || lead.business)?.trim();
+          const itemWebsite = (lead.websiteUrl || lead.website_url || lead.website || lead.domain || lead.site)?.trim();
+          const itemCity = lead.city?.trim();
+          const itemState = lead.state?.trim();
+          const itemCategory = (lead.category || lead.type || lead.primary_category || lead.business_type || lead.industry)?.trim();
+          const itemFirstName = (lead.firstName || lead.first_name || (lead.leadName || lead.lead_name)?.split(" ")[0])?.trim();
+          const itemLastName = (lead.lastName || lead.last_name || (lead.leadName || lead.lead_name)?.split(" ").slice(1).join(" "))?.trim();
+          
+          return {
+            bulkJobId: job.id,
+            rowNumber: idx + 1,
+            status: "complete" as const,
+            parsedData: JSON.parse(JSON.stringify({
+              email: r.email,
+              phone: lead.phone?.trim() || null,
+              firstName: itemFirstName || null,
+              lastName: itemLastName || null,
+              company: itemCompany || null,
+              companyName: itemCompany || null,
+              companyDomain: itemWebsite || null,
+              websiteUrl: itemWebsite || null,
+              website: itemWebsite || null,
+              city: itemCity || null,
+              state: itemState || null,
+              category: itemCategory || null,
+              title: lead.title?.trim() || null,
+            })),
+            contactId: r.contactId!,
+          };
+        });
 
       if (jobItems.length > 0) {
         await storage.createBulkJobItems(jobItems);
