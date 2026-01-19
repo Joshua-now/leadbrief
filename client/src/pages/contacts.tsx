@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { formatDistanceToNow } from "date-fns";
-import { Users, Mail, Phone, Building2, Linkedin, Search, RefreshCw, AlertCircle, MapPin, Globe, Tag, Download, Loader2 } from "lucide-react";
+import { formatDistanceToNow, format } from "date-fns";
+import { Users, Mail, Phone, Building2, Linkedin, Search, RefreshCw, AlertCircle, MapPin, Globe, Tag, Download, Loader2, X, Calendar, Clock, Eye, ExternalLink, Briefcase } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -9,17 +9,38 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
 import { exportFile } from "@/lib/export-utils";
+import { apiGet } from "@/lib/apiClient";
 import type { Contact } from "@shared/schema";
+
+interface ContactWithCompany extends Contact {
+  company?: {
+    id: string;
+    name: string;
+    domain: string | null;
+    linkedinUrl: string | null;
+  } | null;
+}
 
 export default function ContactsPage() {
   const [search, setSearch] = useState("");
   const [isExporting, setIsExporting] = useState(false);
+  const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
   const { toast } = useToast();
   
   const { data: contacts, isLoading, error, refetch } = useQuery<Contact[]>({
     queryKey: ["/api/contacts"],
   });
+
+  const handleContactClick = (contactId: string) => {
+    setSelectedContactId(contactId);
+  };
+
+  const handleCloseDetail = () => {
+    setSelectedContactId(null);
+  };
 
   const handleExport = async (format: 'csv' | 'json') => {
     if (!contacts?.length) {
@@ -191,23 +212,37 @@ export default function ContactsPage() {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {filteredContacts.map((contact) => (
-              <ContactCard key={contact.id} contact={contact} />
+              <ContactCard 
+                key={contact.id} 
+                contact={contact} 
+                onClick={() => handleContactClick(contact.id)}
+              />
             ))}
           </div>
         )}
       </div>
+
+      <ContactDetailModal 
+        contactId={selectedContactId} 
+        open={!!selectedContactId}
+        onClose={handleCloseDetail}
+      />
     </div>
   );
 }
 
-function ContactCard({ contact }: { contact: Contact }) {
+function ContactCard({ contact, onClick }: { contact: Contact; onClick: () => void }) {
   const initials = `${contact.firstName?.[0] || ""}${contact.lastName?.[0] || ""}`.toUpperCase() || 
                    contact.companyName?.[0]?.toUpperCase() || "?";
   const fullName = [contact.firstName, contact.lastName].filter(Boolean).join(" ") || contact.companyName || "Unknown";
   const location = [contact.city, contact.state].filter(Boolean).join(", ");
 
   return (
-    <Card className="hover-elevate transition-shadow" data-testid={`card-contact-${contact.id}`}>
+    <Card 
+      className="hover-elevate cursor-pointer transition-shadow" 
+      onClick={onClick}
+      data-testid={`card-contact-${contact.id}`}
+    >
       <CardContent className="p-4">
         <div className="flex items-start gap-3">
           <Avatar className="h-10 w-10">
@@ -314,5 +349,267 @@ function ContactCard({ contact }: { contact: Contact }) {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function ContactDetailModal({ 
+  contactId, 
+  open, 
+  onClose 
+}: { 
+  contactId: string | null; 
+  open: boolean;
+  onClose: () => void;
+}) {
+  const [contact, setContact] = useState<ContactWithCompany | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchContact = async (id: string) => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const response = await apiGet(`/api/contacts/${id}`);
+      
+      if (response.status === 404) {
+        setError("Contact not found");
+        setContact(null);
+        return;
+      }
+      
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}));
+        setError(errBody.error || "Could not load contact");
+        setContact(null);
+        return;
+      }
+      
+      const data = await response.json();
+      setContact(data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not load contact");
+      setContact(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (open && contactId && !loading && !contact && !error) {
+    fetchContact(contactId);
+  }
+
+  const handleClose = () => {
+    setContact(null);
+    setError(null);
+    onClose();
+  };
+
+  const fullName = contact 
+    ? [contact.firstName, contact.lastName].filter(Boolean).join(" ") || contact.companyName || "Unknown Contact"
+    : "Contact Details";
+  
+  const initials = contact 
+    ? `${contact.firstName?.[0] || ""}${contact.lastName?.[0] || ""}`.toUpperCase() || contact.companyName?.[0]?.toUpperCase() || "?"
+    : "?";
+
+  const location = contact 
+    ? [contact.address, contact.city, contact.state].filter(Boolean).join(", ")
+    : null;
+
+  const formatValue = (value: unknown) => {
+    if (value === null || value === undefined || value === '') return "—";
+    return String(value);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto" data-testid="modal-contact-detail">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-3">
+            {contact && (
+              <Avatar className="h-10 w-10">
+                <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+            )}
+            <span data-testid="text-contact-detail-name">{fullName}</span>
+          </DialogTitle>
+        </DialogHeader>
+
+        {loading && (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        )}
+
+        {error && (
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <AlertCircle className="h-8 w-8 text-destructive mb-2" />
+            <p className="text-sm text-destructive" data-testid="text-contact-error">{error}</p>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="mt-4" 
+              onClick={() => contactId && fetchContact(contactId)}
+              data-testid="button-retry-contact"
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Retry
+            </Button>
+          </div>
+        )}
+
+        {contact && !loading && !error && (
+          <div className="space-y-6">
+            {contact.title && (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Briefcase className="h-4 w-4" />
+                <span>{contact.title}</span>
+              </div>
+            )}
+
+            <Separator />
+
+            <div className="space-y-4">
+              <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Contact Information</h4>
+              
+              <div className="grid gap-3">
+                <DetailRow icon={Mail} label="Email" value={formatValue(contact.email)} testId="email" />
+                <DetailRow icon={Phone} label="Phone" value={formatValue(contact.phone)} testId="phone" />
+                <DetailRow icon={Linkedin} label="LinkedIn" value={contact.linkedinUrl ? (
+                  <a 
+                    href={contact.linkedinUrl} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline flex items-center gap-1"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    View Profile <ExternalLink className="h-3 w-3" />
+                  </a>
+                ) : "—"} testId="linkedin" />
+              </div>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-4">
+              <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Business Information</h4>
+              
+              <div className="grid gap-3">
+                <DetailRow icon={Building2} label="Company" value={formatValue(contact.companyName)} testId="company" />
+                <DetailRow icon={Globe} label="Website" value={contact.website ? (
+                  <a 
+                    href={contact.website.startsWith('http') ? contact.website : `https://${contact.website}`}
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline flex items-center gap-1"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {contact.website.replace(/^https?:\/\//, '')} <ExternalLink className="h-3 w-3" />
+                  </a>
+                ) : "—"} testId="website" />
+                <DetailRow icon={MapPin} label="Location" value={formatValue(location)} testId="location" />
+                <DetailRow icon={Tag} label="Category" value={formatValue(contact.category)} testId="category" />
+              </div>
+            </div>
+
+            {contact.company && (
+              <>
+                <Separator />
+                <div className="space-y-4">
+                  <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Related Company</h4>
+                  <div className="grid gap-3">
+                    <DetailRow icon={Building2} label="Company Name" value={formatValue(contact.company.name)} testId="related-company" />
+                    <DetailRow icon={Globe} label="Domain" value={contact.company.domain ? (
+                      <a 
+                        href={`https://${contact.company.domain}`}
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline flex items-center gap-1"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {contact.company.domain} <ExternalLink className="h-3 w-3" />
+                      </a>
+                    ) : "—"} testId="related-domain" />
+                  </div>
+                </div>
+              </>
+            )}
+
+            {contact.sources && Array.isArray(contact.sources) && contact.sources.length > 0 && (
+              <>
+                <Separator />
+                <div className="space-y-4">
+                  <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Sources</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {contact.sources.map((source, idx) => (
+                      <Badge key={idx} variant="secondary" className="text-xs">
+                        {String(source)}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+
+            <Separator />
+
+            <div className="space-y-4">
+              <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Timestamps</h4>
+              <div className="grid gap-3">
+                <DetailRow 
+                  icon={Calendar} 
+                  label="Created" 
+                  value={contact.createdAt ? format(new Date(contact.createdAt), 'PPpp') : "—"} 
+                  testId="created" 
+                />
+                <DetailRow 
+                  icon={Clock} 
+                  label="Last Seen" 
+                  value={contact.lastSeenAt ? format(new Date(contact.lastSeenAt), 'PPpp') : "—"} 
+                  testId="last-seen" 
+                />
+              </div>
+            </div>
+
+            {contact.dataQualityScore && (
+              <>
+                <Separator />
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Data Quality Score</span>
+                  <Badge variant="secondary">
+                    {Number(contact.dataQualityScore).toFixed(0)}%
+                  </Badge>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DetailRow({ 
+  icon: Icon, 
+  label, 
+  value,
+  testId
+}: { 
+  icon: React.ComponentType<{ className?: string }>; 
+  label: string; 
+  value: React.ReactNode;
+  testId: string;
+}) {
+  return (
+    <div className="flex items-start gap-3">
+      <Icon className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="text-sm truncate" data-testid={`text-detail-${testId}`}>{value}</p>
+      </div>
+    </div>
   );
 }
