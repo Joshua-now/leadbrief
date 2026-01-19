@@ -14,12 +14,24 @@ function determineTier(
   scrapeResult: ScrapeResult,
   businessIntel: BusinessIntelligence
 ): PersonalizationTier {
+  // Tier 2: Rich content with extractable data
   if (scrapeResult.success && scrapeResult.content && scrapeResult.content.bodyText.length >= 100) {
     if (businessIntel.services.length > 0 || businessIntel.signals.length > 0 || businessIntel.foundedYear) {
       return 2;
     }
     return 1;
   }
+  
+  // Tier 1: Scrape succeeded (status 200) but thin content - still try to extract what we can
+  if (scrapeResult.success && scrapeResult.content) {
+    // Even with thin content, if we have some data points, we can generate bullets
+    if (businessIntel.services.length > 0 || businessIntel.signals.length > 0 || 
+        businessIntel.city || businessIntel.companyName || businessIntel.foundedYear) {
+      return 1;
+    }
+  }
+  
+  // Tier 0: No website data available or scrape failed
   return 0;
 }
 

@@ -14,6 +14,7 @@ import { getSystemHealth, withTimeout, categorizeError } from "./lib/guardrails"
 import { getEnvPresenceFlags, getAppVersion, checkDependencies } from "./lib/env";
 import { getLastLogs, crashLog } from "./lib/crash-logger";
 import { pushToInstantly, pushBatchToInstantly, isInstantlyConfigured, getInstantlyConfig } from "./lib/instantly";
+import { normalizeWebsiteUrl } from "./lib/normalize";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -166,20 +167,6 @@ export async function registerRoutes(
     });
   });
   
-  // Helper: Normalize URL to https:// format
-  function normalizeUrl(url: string | null | undefined): string | null {
-    if (!url || typeof url !== 'string') return null;
-    const trimmed = url.trim();
-    if (!trimmed) return null;
-    
-    // Already has protocol
-    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-      return trimmed.startsWith('http://') ? trimmed.replace('http://', 'https://') : trimmed;
-    }
-    
-    // Add https:// prefix
-    return `https://${trimmed}`;
-  }
 
   // Debug whoami endpoint - detailed auth diagnostics (does not require auth)
   app.get("/api/debug/whoami", async (req: Request, res: Response) => {
@@ -280,7 +267,7 @@ export async function registerRoutes(
           
           return {
             company_name: enrichment?.companyName || parsed?.company || parsed?.companyName || null,
-            website: normalizeUrl(domainDiscovery?.domain || parsed?.companyDomain || parsed?.websiteUrl || parsed?.website),
+            website: normalizeWebsiteUrl(domainDiscovery?.domain || parsed?.companyDomain || parsed?.websiteUrl || parsed?.website),
             personalization_bullets: item.personalizationBullets || [],
             confidence_score: item.confidenceScore ? parseFloat(item.confidenceScore) : 0,
             email: parsed?.email || null,
@@ -1744,7 +1731,7 @@ export async function registerRoutes(
         
         return {
           company_name: enrichment?.companyName || parsed?.company || parsed?.companyName || null,
-          website: normalizeUrl(domainDiscovery?.domain || parsed?.companyDomain || parsed?.websiteUrl || parsed?.website),
+          website: normalizeWebsiteUrl(domainDiscovery?.domain || parsed?.companyDomain || parsed?.websiteUrl || parsed?.website),
           city: enrichment?.city || parsed?.city || null,
           state: enrichment?.state || null,
           category: enrichment?.industry || null,
@@ -1796,6 +1783,20 @@ export async function registerRoutes(
       
       const exportRecords = keptRecords;
       console.log(`[Export] Deduplicated: ${rawRecords.length} -> ${exportRecords.length} records`);
+      
+      // Calculate and log export stats
+      const websitePresentCount = exportRecords.filter(r => r.website).length;
+      const scrapeSuccessCount = exportRecords.filter(r => {
+        const source = r.scrape_sources[0];
+        return source && source.statusCode === 200;
+      }).length;
+      const bulletsPresentCount = exportRecords.filter(r => r.personalization_bullets && r.personalization_bullets.length > 0).length;
+      const confidenceScores = exportRecords.map(r => r.confidence_score);
+      const avgConfidence = confidenceScores.length > 0 
+        ? (confidenceScores.reduce((a, b) => a + b, 0) / confidenceScores.length).toFixed(2) 
+        : '0.00';
+      
+      console.log(`[Export Stats] total_rows=${exportRecords.length}, website_present=${websitePresentCount}, scrape_success_200=${scrapeSuccessCount}, bullets_present=${bulletsPresentCount}, avg_confidence=${avgConfidence}`);
 
       if (format === 'csv') {
         // Generate CSV

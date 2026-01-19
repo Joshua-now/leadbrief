@@ -165,9 +165,14 @@ export function calculateConfidenceScore(
   let score = 0;
   const factors: string[] = [];
   
+  // Track if we have any REAL enrichment data from scraping
+  // Input data (company name, location) alone doesn't count as enrichment
+  let hasEnrichment = false;
+  
   if (scrapeResult.success && scrapeResult.content) {
     score += 0.3;
     factors.push('Website scraped successfully');
+    hasEnrichment = true;
     
     if (scrapeResult.content.title) {
       score += 0.05;
@@ -178,29 +183,36 @@ export function calculateConfidenceScore(
     if (scrapeResult.content.bodyText.length > 500) {
       score += 0.1;
       factors.push('Rich website content');
+    } else if (scrapeResult.content.bodyText.length > 50) {
+      score += 0.05;
+      factors.push('Thin website content');
     }
-  } else {
-    factors.push('No website data available');
   }
   
+  // These are input-derived fields, not enrichment
   if (businessIntel.companyName) {
     score += 0.1;
-    factors.push('Company name identified');
   }
   
   if (businessIntel.city || businessIntel.state) {
     score += 0.1;
-    factors.push('Location identified');
   }
   
+  // Services and signals from scraping ARE enrichment
   if (businessIntel.services.length > 0) {
     score += 0.1;
     factors.push(`${businessIntel.services.length} services identified`);
+    hasEnrichment = true;
   }
   
   if (businessIntel.signals.length >= 2) {
     score += 0.1;
     factors.push('Multiple business signals found');
+    hasEnrichment = true;
+  } else if (businessIntel.signals.length === 1) {
+    score += 0.05;
+    factors.push('Business signal found');
+    hasEnrichment = true;
   }
   
   if (inputData.email) {
@@ -212,6 +224,15 @@ export function calculateConfidenceScore(
   
   score = Math.min(score, 1);
   score = Math.round(score * 100) / 100;
+  
+  // If no real enrichment data (no scrape success, no services/signals), return thin_record
+  // This is regardless of having company name or location from input
+  if (!hasEnrichment) {
+    return {
+      score,
+      rationale: 'thin_record',
+    };
+  }
   
   return {
     score,

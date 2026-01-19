@@ -3,6 +3,7 @@ import { scrapeWebsite, type ScrapeResult, type ScrapeSource } from "./scraper";
 import { extractBusinessIntelligence, calculateConfidenceScore } from "./content-parser";
 import { generatePersonalization } from "./personalization";
 import { discoverDomain } from "./domain-discovery";
+import { normalizeWebsiteUrl } from "./normalize";
 
 // Track jobs currently being processed to prevent concurrent execution
 const processingJobs = new Set<string>();
@@ -91,10 +92,11 @@ async function processItem(
   let discoveredDomain = domainResult.domain;
   const domainSource = domainResult.source;
   
-  // Use discovered domain or fall back to input
-  const websiteUrl = discoveredDomain 
+  // Use discovered domain or fall back to input, then normalize URL
+  const rawWebsiteUrl = discoveredDomain 
     ? `https://${discoveredDomain}` 
     : (data.companyDomain || data.websiteUrl || data.website || data.url || null);
+  const websiteUrl = normalizeWebsiteUrl(rawWebsiteUrl);
   
   // STEP 2: Scrape website if available
   let scrapeResult: ScrapeResult = {

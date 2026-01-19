@@ -1,5 +1,54 @@
 import crypto from 'crypto';
 
+/**
+ * Normalize website URL to a clean https:// format
+ * Rules:
+ * - If starts with http:// or https:// keep it (convert http to https)
+ * - If starts with https// (missing colon) fix to https://
+ * - If domain-only (example.com / www.example.com) prepend https://
+ * - Strip whitespace, trailing slashes, and punctuation
+ * - Returns null for invalid/empty input
+ */
+export function normalizeWebsiteUrl(url: string | null | undefined): string | null {
+  if (!url || typeof url !== 'string') return null;
+  
+  let cleaned = url.trim();
+  if (!cleaned) return null;
+  
+  // Fix common malformed protocols
+  // Handle "https//" -> "https://" (missing colon)
+  cleaned = cleaned.replace(/^https\/\//i, 'https://');
+  // Handle "http//" -> "http://" (missing colon)  
+  cleaned = cleaned.replace(/^http\/\//i, 'http://');
+  // Handle double protocol "https://https://" or "https://http://"
+  cleaned = cleaned.replace(/^https?:\/\/https?:\/\//i, 'https://');
+  // Handle "https://https//" (mixed malformed)
+  cleaned = cleaned.replace(/^https?:\/\/https\/\//i, 'https://');
+  
+  // If no protocol, add https://
+  if (!cleaned.startsWith('http://') && !cleaned.startsWith('https://')) {
+    cleaned = 'https://' + cleaned;
+  }
+  
+  // Convert http to https
+  if (cleaned.startsWith('http://')) {
+    cleaned = cleaned.replace('http://', 'https://');
+  }
+  
+  // Strip trailing slashes and punctuation
+  cleaned = cleaned.replace(/[\/\s.,;:!?]+$/, '');
+  
+  // Validate URL format
+  try {
+    const parsed = new URL(cleaned);
+    // Return normalized URL (without trailing slash)
+    return parsed.origin + parsed.pathname.replace(/\/+$/, '');
+  } catch {
+    // If URL parsing fails, return null
+    return null;
+  }
+}
+
 export function normalizeEmail(email: string | null | undefined): string | null {
   if (!email || typeof email !== 'string') return null;
   const trimmed = email.trim().toLowerCase();
