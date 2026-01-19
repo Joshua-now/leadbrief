@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import multer from "multer";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { storage } from "./storage";
 import { BulkInputHandler, IMPORT_LIMITS } from "./lib/input-handler";
 import { processJobItems, recoverStaleJobs, getProcessorHealth } from "./lib/job-processor";
@@ -246,12 +246,12 @@ export async function registerRoutes(
       const contactsCount = await db.select({ count: db.$count(contacts) }).from(contacts);
       const companiesCount = await db.select({ count: db.$count(companies) }).from(companies);
       
-      // Find most recent completed job
+      // Find most recent completed job (descending order for newest first)
       const recentJobs = await db
         .select()
         .from(bulkJobs)
         .where(eq(bulkJobs.status, 'complete'))
-        .orderBy(bulkJobs.createdAt)
+        .orderBy(desc(bulkJobs.createdAt))
         .limit(1);
       
       const recentJob = recentJobs[0] || null;
@@ -285,7 +285,7 @@ export async function registerRoutes(
             confidence_score: item.confidenceScore ? parseFloat(item.confidenceScore) : 0,
             email: parsed?.email || null,
             phone: parsed?.phone || null,
-            city: parsed?.city || null,
+            city: (enrichment?.city as string) || parsed?.city || null,
           };
         });
         
