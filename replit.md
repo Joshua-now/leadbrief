@@ -36,7 +36,7 @@ The frontend follows a page-based architecture with shared components. Key pages
 - **Landing Page**: Public landing page for unauthenticated users with feature showcase
 - **Import**: Data upload with CSV/JSON/XLSX support
 - **Jobs**: Import job tracking with progress and status
-- **Contacts**: Contact management with search and filtering  
+- **Contacts**: Contact management with search, filtering, and clickable detail modal  
 - **Reports**: Analytics and insights dashboard
 - **Settings**: Webhook configuration, API settings, notifications
 
@@ -129,11 +129,12 @@ The backend uses a modular route registration pattern with dedicated storage abs
 | `/api/jobs/:id/retry` | POST | Retry failed job |
 | `/api/jobs/recover` | POST | Recover stale jobs |
 | `/api/contacts` | GET | List contacts (paginated) |
-| `/api/contacts/:id` | GET | Get contact details |
+| `/api/contacts/:id` | GET | Get contact details with company relation (UUID required) |
 | `/api/health` | GET | System health check (liveness) |
 | `/api/ready` | GET | Dependency readiness check |
 | `/api/debug/session` | GET | Debug auth state (protected) - returns userId, email, provider, session expiry |
 | `/api/debug/whoami` | GET | Auth diagnostics (no auth required) - returns provider, token status, session info |
+| `/api/debug/export-health` | GET | Export health check (protected) - returns DB counts, dedupe stats, data quality metrics |
 | `/api/finalcheck` | GET | Comprehensive verification (tests health, ready, intake auth, DB write) |
 | `/api/config/limits` | GET | Get import limits |
 | `/api/jobs/:id/export` | GET | Export job results (CSV/JSON) - returns structured noData response if empty |
