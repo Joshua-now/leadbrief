@@ -200,8 +200,29 @@ function JobCard({ job, onRetry, isRetrying }: { job: BulkJob; onRetry: () => vo
   const canRetry = job.status === "failed" || (job.status === "complete" && (job.failed || 0) > 0);
   const canExport = job.status === "complete" || job.status === "completed";
 
-  const handleExport = (format: 'csv' | 'json') => {
-    window.location.href = `/api/jobs/${job.id}/export?format=${format}`;
+  const handleExport = async (format: 'csv' | 'json') => {
+    try {
+      const response = await fetch(`/api/jobs/${job.id}/export?format=${format}`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+      
+      if (!response.ok) {
+        throw new Error('Export failed');
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `export-${job.id}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Export error:', error);
+    }
   };
 
   return (
