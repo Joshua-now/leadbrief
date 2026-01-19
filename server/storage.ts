@@ -49,14 +49,21 @@ export interface IStorage {
   // Bulk Jobs
   getBulkJob(id: string): Promise<BulkJob | undefined>;
   getBulkJobs(limit?: number): Promise<BulkJob[]>;
+  getBulkJobsFiltered(filter: 'active' | 'archived', limit?: number): Promise<BulkJob[]>;
   createBulkJob(job: InsertBulkJob): Promise<BulkJob>;
   updateBulkJob(id: string, updates: Partial<InsertBulkJob>): Promise<BulkJob | undefined>;
+  archiveBulkJob(id: string): Promise<BulkJob | undefined>;
+  deleteBulkJob(id: string): Promise<{ deleted: boolean; itemsDeleted: number }>;
+  deleteBulkJobContacts(jobId: string): Promise<{ contactsDeleted: number }>;
   
   // Bulk Job Items
   getBulkJobItems(bulkJobId: string): Promise<BulkJobItem[]>;
   createBulkJobItems(items: InsertBulkJobItem[]): Promise<BulkJobItem[]>;
   updateBulkJobItem(id: string, updates: Partial<InsertBulkJobItem>): Promise<BulkJobItem | undefined>;
   getBulkJobStats(bulkJobId: string): Promise<{ total: number; completed: number; failed: number; processing: number }>;
+  
+  // Delete operations
+  deleteContact(id: string): Promise<boolean>;
   
   // Settings
   getSettings(): Promise<Settings | undefined>;
@@ -283,6 +290,20 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(bulkJobs).orderBy(desc(bulkJobs.createdAt)).limit(limit);
   }
 
+  async getBulkJobsFiltered(filter: 'active' | 'archived', limit = 20): Promise<BulkJob[]> {
+    if (filter === 'archived') {
+      return db.select().from(bulkJobs)
+        .where(isNotNull(bulkJobs.archivedAt))
+        .orderBy(desc(bulkJobs.createdAt))
+        .limit(limit);
+    } else {
+      return db.select().from(bulkJobs)
+        .where(sql`${bulkJobs.archivedAt} IS NULL`)
+        .orderBy(desc(bulkJobs.createdAt))
+        .limit(limit);
+    }
+  }
+
   async createBulkJob(job: InsertBulkJob): Promise<BulkJob> {
     const [created] = await db.insert(bulkJobs).values(job).returning();
     return created;
@@ -295,6 +316,53 @@ export class DatabaseStorage implements IStorage {
       .where(eq(bulkJobs.id, id))
       .returning();
     return updated || undefined;
+  }
+
+  async archiveBulkJob(id: string): Promise<BulkJob | undefined> {
+    const [updated] = await db
+      .update(bulkJobs)
+      .set({ archivedAt: new Date() } as any)
+      .where(eq(bulkJobs.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteBulkJob(id: string): Promise<{ deleted: boolean; itemsDeleted: number }> {
+    // First count items that will be deleted (cascade handles actual deletion)
+    const items = await this.getBulkJobItems(id);
+    const itemCount = items.length;
+    
+    // Delete the job (cascade will delete items due to foreign key)
+    const result = await db.delete(bulkJobs).where(eq(bulkJobs.id, id));
+    
+    return { deleted: true, itemsDeleted: itemCount };
+  }
+
+  async deleteBulkJobContacts(jobId: string): Promise<{ contactsDeleted: number }> {
+    // Get all job items that have a contactId
+    const items = await db.select({ contactId: bulkJobItems.contactId })
+      .from(bulkJobItems)
+      .where(and(
+        eq(bulkJobItems.bulkJobId, jobId),
+        isNotNull(bulkJobItems.contactId)
+      ));
+    
+    const contactIds = items
+      .map(i => i.contactId)
+      .filter((id): id is string => id !== null);
+    
+    if (contactIds.length === 0) {
+      return { contactsDeleted: 0 };
+    }
+    
+    // Delete contacts by their IDs
+    let deleted = 0;
+    for (const contactId of contactIds) {
+      await db.delete(contacts).where(eq(contacts.id, contactId));
+      deleted++;
+    }
+    
+    return { contactsDeleted: deleted };
   }
 
   // Bulk Job Items
@@ -324,6 +392,12 @@ export class DatabaseStorage implements IStorage {
       failed: items.filter(i => i.status === "failed").length,
       processing: items.filter(i => i.status === "processing").length,
     };
+  }
+
+  // Delete operations
+  async deleteContact(id: string): Promise<boolean> {
+    await db.delete(contacts).where(eq(contacts.id, id));
+    return true;
   }
 
   // Settings

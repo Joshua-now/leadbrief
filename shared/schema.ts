@@ -68,6 +68,7 @@ export const bulkJobs = pgTable("bulk_jobs", {
   errorLog: jsonb("error_log"),
   startedAt: timestamp("started_at"),
   completedAt: timestamp("completed_at"),
+  archivedAt: timestamp("archived_at"),
 });
 
 export const bulkJobItems = pgTable("bulk_job_items", {

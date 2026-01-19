@@ -884,11 +884,18 @@ export async function registerRoutes(
     }
   });
 
-  // Get all jobs (protected)
+  // Get all jobs (protected) - supports filter=active|archived (default: active)
   app.get("/api/jobs", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
-      const jobs = await storage.getBulkJobs(limit);
+      const filter = (req.query.filter as string) || 'active'; // 'active' or 'archived'
+      
+      let jobs;
+      if (filter === 'active' || filter === 'archived') {
+        jobs = await storage.getBulkJobsFiltered(filter, limit);
+      } else {
+        jobs = await storage.getBulkJobs(limit);
+      }
       res.json(jobs);
     } catch (error) {
       console.error("Error fetching jobs:", error);
@@ -949,6 +956,98 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error retrying job:", error);
       res.status(500).json({ error: "Failed to retry job" });
+    }
+  });
+
+  // Archive a job (sets archived_at timestamp)
+  app.post("/api/jobs/:id/archive", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+        return res.status(400).json({ error: "Invalid job ID format" });
+      }
+
+      const job = await storage.getBulkJob(id);
+      if (!job) {
+        return res.status(404).json({ error: "Job not found" });
+      }
+
+      const archived = await storage.archiveBulkJob(id);
+      res.json({ success: true, message: "Job archived", job: archived });
+    } catch (error) {
+      console.error("Error archiving job:", error);
+      res.status(500).json({ error: "Failed to archive job" });
+    }
+  });
+
+  // Delete a job and cascade to items (dangerous - requires confirmation token)
+  app.delete("/api/jobs/:id", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { confirmDelete } = req.body;
+      
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+        return res.status(400).json({ error: "Invalid job ID format" });
+      }
+
+      const job = await storage.getBulkJob(id);
+      if (!job) {
+        return res.status(404).json({ error: "Job not found" });
+      }
+
+      // Require confirmation token for dangerous operation
+      if (confirmDelete !== "DELETE") {
+        return res.status(400).json({ 
+          error: "Confirmation required", 
+          message: "To delete this job and all its items, send confirmDelete: 'DELETE'" 
+        });
+      }
+
+      const result = await storage.deleteBulkJob(id);
+      res.json({ 
+        success: true, 
+        message: `Job deleted with ${result.itemsDeleted} items`,
+        itemsDeleted: result.itemsDeleted
+      });
+    } catch (error) {
+      console.error("Error deleting job:", error);
+      res.status(500).json({ error: "Failed to delete job" });
+    }
+  });
+
+  // Delete contacts linked to a job (via bulk_job_items.contact_id)
+  app.delete("/api/jobs/:id/contacts", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { confirm } = req.body;
+      
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+        return res.status(400).json({ error: "Invalid job ID format" });
+      }
+
+      const job = await storage.getBulkJob(id);
+      if (!job) {
+        return res.status(404).json({ error: "Job not found" });
+      }
+
+      // Require confirmation for dangerous operation
+      if (confirm !== true) {
+        return res.status(400).json({ 
+          error: "Confirmation required", 
+          message: "To delete contacts linked to this job, send confirm: true" 
+        });
+      }
+
+      const result = await storage.deleteBulkJobContacts(id);
+      res.json({ 
+        success: true, 
+        message: `Deleted ${result.contactsDeleted} contacts linked to this job`,
+        contactsDeleted: result.contactsDeleted
+      });
+    } catch (error) {
+      console.error("Error deleting job contacts:", error);
+      res.status(500).json({ error: "Failed to delete job contacts" });
     }
   });
 
@@ -1451,6 +1550,41 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching contact:", error);
       res.status(500).json({ error: "Failed to fetch contact" });
+    }
+  });
+
+  // Delete a contact (requires confirmation)
+  app.delete("/api/contacts/:id", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { confirm } = req.body;
+      
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+        return res.status(400).json({ error: "Invalid contact ID format" });
+      }
+
+      const contact = await storage.getContact(id);
+      if (!contact) {
+        return res.status(404).json({ error: "Contact not found" });
+      }
+
+      // Require confirmation for dangerous operation
+      if (confirm !== true) {
+        return res.status(400).json({ 
+          error: "Confirmation required", 
+          message: "To delete this contact, send confirm: true" 
+        });
+      }
+
+      await storage.deleteContact(id);
+      res.json({ 
+        success: true, 
+        message: "Contact deleted",
+        deletedId: id
+      });
+    } catch (error) {
+      console.error("Error deleting contact:", error);
+      res.status(500).json({ error: "Failed to delete contact" });
     }
   });
 
