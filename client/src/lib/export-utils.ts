@@ -83,8 +83,9 @@ export async function exportFile(options: ExportOptions): Promise<ExportResult> 
     console.log(`[Export] Content-Type: ${contentType}`);
     
     if (contentType.includes('text/html')) {
-      const errorMsg = 'Server returned HTML instead of data. Check if you are logged in.';
-      console.error(`[Export] HTML response received instead of data`, { url });
+      const errorMsg = 'Routing issue: API returned HTML instead of data. First 200 chars logged to console.';
+      const htmlPreview = await response.text();
+      console.error(`[Export] HTML response received instead of data`, { url, htmlPreview: htmlPreview.substring(0, 200) });
       toast({
         title: "Export Failed",
         description: errorMsg,
@@ -93,13 +94,62 @@ export async function exportFile(options: ExportOptions): Promise<ExportResult> 
       return { success: false, error: errorMsg };
     }
     
+    // Check for structured "no data" JSON response (server returns 200 with noData: true)
+    if (contentType.includes('application/json')) {
+      const jsonData = await response.json();
+      
+      if (jsonData.noData) {
+        const reason = jsonData.reason || 'No data available for export';
+        const counts = jsonData.counts || {};
+        console.warn(`[Export] No data response:`, { reason, counts, job: jsonData.job });
+        
+        // Build detailed message
+        let detailMessage = reason;
+        if (counts.byStatus) {
+          const statusList = Object.entries(counts.byStatus)
+            .map(([status, count]) => `${status}: ${count}`)
+            .join(', ');
+          detailMessage += ` (${statusList})`;
+        }
+        
+        toast({
+          title: "No Data to Export",
+          description: detailMessage,
+          variant: "destructive",
+        });
+        return { success: false, error: reason };
+      }
+      
+      // If JSON export format was requested and we have actual data, download it
+      if (format === 'json') {
+        const jsonBlob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' });
+        console.log(`[Export] Downloading JSON file: ${filename} (${jsonBlob.size} bytes)`);
+        
+        const blobUrl = window.URL.createObjectURL(jsonBlob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(blobUrl);
+        document.body.removeChild(a);
+        
+        toast({
+          title: "Export Complete",
+          description: `Downloaded ${filename}`,
+        });
+        
+        return { success: true };
+      }
+    }
+    
     const blob = await response.blob();
     
     if (blob.size === 0) {
       const errorMsg = 'Export returned empty file. No data to export.';
       console.warn(`[Export] Empty blob received`, { url });
       toast({
-        title: "Export Failed",
+        title: "No Data to Export",
         description: errorMsg,
         variant: "destructive",
       });

@@ -1093,6 +1093,17 @@ export async function registerRoutes(
       const contacts = await storage.getContacts(500);
       console.log(`[Export] Contacts fetched: ${contacts.length}`);
       
+      // Return structured "no data" response
+      if (contacts.length === 0) {
+        console.log(`[Export] No contacts found for export`);
+        return res.status(200).json({
+          noData: true,
+          reason: "No contacts found in database",
+          counts: { total: 0 },
+          exportedAt: new Date().toISOString(),
+        });
+      }
+      
       if (format === 'csv') {
         const headers = [
           'first_name', 'last_name', 'email', 'phone', 'title',
@@ -1459,6 +1470,35 @@ export async function registerRoutes(
       // Build export records with required fields
       const filteredItems = items.filter(item => item.status === 'complete' || item.status === 'completed');
       console.log(`[Export] Filtered items (complete/completed): ${filteredItems.length} of ${items.length}`);
+      
+      // Group items by status for debugging
+      const statusCounts = items.reduce((acc, item) => {
+        acc[item.status] = (acc[item.status] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+      console.log(`[Export] Status breakdown:`, JSON.stringify(statusCounts));
+      
+      // Return structured "no data" response if no completed items
+      if (filteredItems.length === 0) {
+        console.log(`[Export] No completed items for job: ${id}`);
+        return res.status(200).json({
+          noData: true,
+          reason: items.length === 0 
+            ? "Job has no items" 
+            : `Job has ${items.length} items but none with 'complete' or 'completed' status`,
+          counts: {
+            total: items.length,
+            byStatus: statusCounts,
+            exportable: 0,
+          },
+          job: {
+            id: job.id,
+            name: job.name,
+            status: job.status,
+          },
+          exportedAt: new Date().toISOString(),
+        });
+      }
       
       const exportRecords = filteredItems
         .map(item => {
