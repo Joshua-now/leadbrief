@@ -58,6 +58,7 @@ export function registerAuthRoutes(app: Express): void {
     const user = req.user as any;
 
     if (!req.isAuthenticated || !req.isAuthenticated() || !user?.expires_at) {
+      console.log(`[Auth] /api/auth/user 401 - isAuthenticated fn: ${!!req.isAuthenticated}, isAuthenticated(): ${req.isAuthenticated?.()}, hasUser: ${!!user}, expires_at: ${user?.expires_at}, sessionID: ${(req as any).sessionID?.slice(0, 8)}`);
       return res.status(401).json({ message: "Unauthorized" });
     }
 
