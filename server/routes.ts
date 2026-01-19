@@ -1351,8 +1351,8 @@ export async function registerRoutes(
     }
   });
 
-  // Export job results (CSV or JSON)
-  app.get("/api/jobs/:id/export", async (req: Request, res: Response) => {
+  // Export job results (CSV or JSON) - protected
+  app.get("/api/jobs/:id/export", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const format = (req.query.format as string) || 'json';

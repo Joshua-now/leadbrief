@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { FileText, Clock, CheckCircle2, XCircle, Loader2, AlertCircle, RefreshCw, RotateCcw } from "lucide-react";
+import { FileText, Clock, CheckCircle2, XCircle, Loader2, AlertCircle, RefreshCw, RotateCcw, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -198,6 +198,11 @@ function JobCard({ job, onRetry, isRetrying }: { job: BulkJob; onRetry: () => vo
     : job.progress || 0;
 
   const canRetry = job.status === "failed" || (job.status === "complete" && (job.failed || 0) > 0);
+  const canExport = job.status === "complete" || job.status === "completed";
+
+  const handleExport = (format: 'csv' | 'json') => {
+    window.location.href = `/api/jobs/${job.id}/export?format=${format}`;
+  };
 
   return (
     <Card className="hover-elevate transition-shadow" data-testid={`card-job-${job.id}`}>
@@ -261,24 +266,37 @@ function JobCard({ job, onRetry, isRetrying }: { job: BulkJob; onRetry: () => vo
             )}
           </div>
 
-          {canRetry && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onRetry}
-              disabled={isRetrying}
-              data-testid={`button-retry-${job.id}`}
-            >
-              {isRetrying ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <>
-                  <RotateCcw className="mr-2 h-4 w-4" />
-                  Retry
-                </>
-              )}
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {canExport && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleExport('csv')}
+                data-testid={`button-export-${job.id}`}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Export CSV
+              </Button>
+            )}
+            {canRetry && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onRetry}
+                disabled={isRetrying}
+                data-testid={`button-retry-${job.id}`}
+              >
+                {isRetrying ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    <RotateCcw className="mr-2 h-4 w-4" />
+                    Retry
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
         </div>
       </CardContent>
     </Card>

@@ -1,0 +1,110 @@
+We have a deployed LeadBrief app on Railway with:
+
+A working Express backend (leadbrief service)
+
+API routes like /api/bulk-jobs, /api/bulk-jobs/:id/export
+
+A frontend UI that shows Jobs, Contacts, and Reports
+
+Current Bug
+The UI is calling /api/* endpoints, but instead of receiving JSON or CSV, it receives index.html (text/html, <!DOCTYPE html>).
+This means the frontend is being served without proper routing/proxy to the backend API.
+
+As a result:
+
+Job “file/download” icons do nothing
+
+/api/bulk-jobs returns HTML instead of JSON
+
+Reports cannot be downloaded from the UI despite completed jobs existing
+
+🎯 Goal
+
+Fix the UI so:
+
+All /api/* requests reach the Express backend
+
+Job exports (CSV / JSON) download correctly from the UI
+
+The Jobs page “file” icon triggers the correct export endpoint
+
+🛠️ What to Fix (Required Actions)
+1️⃣ Ensure frontend API base URL is correct
+
+Audit frontend API calls (fetch / axios)
+
+Confirm they use either:
+
+a configurable API_BASE_URL, or
+
+relative /api/* paths only if served by the same backend service
+
+If frontend is deployed separately, update calls to:
+
+fetch(`${API_BASE_URL}/api/bulk-jobs`)
+
+2️⃣ Fix Railway service routing
+
+Ensure the public domain is attached to the Express backend service, not a static-only frontend
+
+If frontend + backend are separate services:
+
+Add a proxy or rewrite rule so /api/* forwards to the backend service
+
+OR deploy frontend assets from the backend service itself
+
+3️⃣ Express fallback routing (important)
+
+In the backend server:
+
+Confirm SPA fallback only applies after API routes
+
+app.use("/api", apiRouter);
+
+// SPA fallback LAST
+app.get("*", (_, res) => {
+  res.sendFile(path.join(distPath, "index.html"));
+});
+
+
+This prevents /api/* from returning HTML.
+
+📦 Reports / Jobs UI Fix
+4️⃣ Wire Job “Download” icon correctly
+
+When clicking the file icon:
+
+Call:
+
+GET /api/bulk-jobs/:id/export?format=csv
+
+
+Trigger browser download:
+
+window.location.href = `/api/bulk-jobs/${jobId}/export?format=csv`;
+
+5️⃣ Validate responses
+
+/api/bulk-jobs → application/json
+
+/api/bulk-jobs/:id/export → text/csv or application/json
+
+Never return text/html from API endpoints
+
+✅ Acceptance Criteria
+
+/api/bulk-jobs returns JSON in browser DevTools
+
+Clicking a completed Job’s file icon downloads a CSV
+
+No API request returns index.html
+
+Jobs, Contacts, and Reports all load data correctly in UI
+
+🧠 Notes
+
+Database, migrations, and data integrity are already correct
+
+This is strictly a frontend routing + deployment configuration issue
+
+Prioritize correctness over hacks (no hardcoded domains unless intentional)
