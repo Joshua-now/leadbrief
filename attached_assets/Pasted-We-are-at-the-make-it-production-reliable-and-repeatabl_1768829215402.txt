@@ -1,0 +1,99 @@
+We are at the “make it production-reliable and repeatable” stage. Please do a full hardening pass so the app consistently produces clean exports and can run day-to-day without babysitting.
+
+1) Auth + Session Reliability (stop the 401/session expired churn)
+
+Fix Supabase session handling so logged-in users do NOT get “session expired” while actively using the app.
+
+Ensure API requests always include valid auth (cookies/JWT) and refresh tokens correctly.
+
+Add a single global handler for 401:
+
+If token refresh succeeds, retry the request automatically.
+
+If refresh fails, show a clear modal: “Session expired — please log in” and redirect to login.
+
+Confirm all protected endpoints return JSON errors (never HTML).
+
+2) Export Must Always Work (Jobs, Contacts, Reports)
+
+Ensure every export button is wired correctly and hits the correct endpoint.
+
+Fix any route ordering issues so “/export” is never mistaken for “/:id”.
+
+Add consistent download behavior:
+
+Proper Content-Type and Content-Disposition
+
+Handles empty datasets gracefully (download CSV with headers + “no rows” toast, not a failure)
+
+Add loading + disabled states + clear success/failure toasts.
+
+Add logging on server for each export: route, user, status code, row counts, time.
+
+3) Data Quality + Output Cleanliness (email-ready CSV)
+
+Export CSV should be clean and useful:
+
+No broken URLs (normalize website field)
+
+No generic filler bullets when no enrichment exists
+
+If scrape succeeded (200) but bullets are empty, generate “thin but real” bullets using whatever signals exist.
+
+Confidence + rationale must be truthful (no “location identified” pretending enrichment).
+
+Ensure dedup logic is deterministic (first-in-wins, claim identifiers) and tested.
+
+4) UI Consistency + “Don’t Make Me Think”
+
+Jobs list:
+
+Completed jobs must show clear actions: View Results, Export CSV, Export JSON
+
+Each action must either work or show a meaningful error.
+
+Reports:
+
+Clicking a report/contact reliably opens details.
+
+If no report exists, show “No report generated yet” + “Generate report” action.
+
+Add a small “Diagnostics” panel (admin-only) showing:
+
+auth state (logged in, token age)
+
+API base URL
+
+last export status
+
+5) End-to-End Verification Checklist (must pass before merging)
+
+Add a verify.sh or npm run verify that checks:
+
+App boots cleanly
+
+Login works
+
+Create/import a small sample set (5 rows)
+
+Enrichment runs
+
+Exports succeed (CSV download returns 200 + correct headers)
+
+No HTML responses from API endpoints
+
+Reports and Contacts detail views work
+
+Acceptance Criteria (must be true)
+
+I can log in once and use the app for 30+ minutes without session-expired popups.
+
+Export works every time for Jobs + Reports + Contacts (even if dataset is empty).
+
+Exported CSV is “email-ready” (clean columns, normalized URLs, meaningful bullets when available).
+
+All API errors are JSON and surfaced in the UI with clear messages.
+
+Provide a short summary of fixes + any remaining risks.
+
+Please implement this as a focused PR with tests where practical and minimal scope creep.

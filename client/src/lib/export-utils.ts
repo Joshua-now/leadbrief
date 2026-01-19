@@ -7,9 +7,16 @@ export interface ExportOptions {
   filename: string;
 }
 
+export interface ExportArtifactMetadata {
+  filename: string | null;
+  filePath: string | null;
+  rowCount: number | null;
+}
+
 export interface ExportResult {
   success: boolean;
   error?: string;
+  artifact?: ExportArtifactMetadata;
 }
 
 export async function exportFile(options: ExportOptions): Promise<ExportResult> {
@@ -133,6 +140,19 @@ export async function exportFile(options: ExportOptions): Promise<ExportResult> 
       }
     }
     
+    // Capture artifact metadata from headers
+    const artifactFilename = response.headers.get('X-Export-Filename');
+    const artifactPath = response.headers.get('X-Export-Path');
+    const artifactRows = response.headers.get('X-Export-Rows');
+    
+    const artifact: ExportArtifactMetadata = {
+      filename: artifactFilename,
+      filePath: artifactPath,
+      rowCount: artifactRows ? parseInt(artifactRows, 10) : null,
+    };
+    
+    console.log(`[Export] Artifact metadata:`, artifact);
+    
     const blob = await response.blob();
     
     if (blob.size === 0) {
@@ -157,12 +177,16 @@ export async function exportFile(options: ExportOptions): Promise<ExportResult> 
     window.URL.revokeObjectURL(blobUrl);
     document.body.removeChild(a);
     
+    // Show toast with artifact filename if available
+    const displayFilename = artifact.filename || filename;
     toast({
       title: "Export Complete",
-      description: `Downloaded ${filename}`,
+      description: artifact.filename 
+        ? `Downloaded ${displayFilename} (saved to server)`
+        : `Downloaded ${displayFilename}`,
     });
     
-    return { success: true };
+    return { success: true, artifact };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Network error. Please check your connection.';
     console.error(`[Export] Exception:`, error, { url });

@@ -15,6 +15,7 @@ import { getEnvPresenceFlags, getAppVersion, checkDependencies } from "./lib/env
 import { getLastLogs, crashLog } from "./lib/crash-logger";
 import { pushToInstantly, pushBatchToInstantly, isInstantlyConfigured, getInstantlyConfig } from "./lib/instantly";
 import { normalizeWebsiteUrl } from "./lib/normalize";
+import { writeExportArtifact, listExportFiles, getExportFile, type ExportArtifactMetadata } from "./lib/exportArtifacts";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -1333,9 +1334,18 @@ export async function registerRoutes(
           csvRows.push(row.join(','));
         }
         
+        const csvContent = csvRows.join('\n');
+        
+        const artifact = await writeExportArtifact(csvContent, 'contacts', undefined, contacts.length);
+        
         res.setHeader('Content-Type', 'text/csv');
         res.setHeader('Content-Disposition', `attachment; filename="contacts-export.csv"`);
-        res.send(csvRows.join('\n'));
+        if (artifact) {
+          res.setHeader('X-Export-Filename', artifact.filename);
+          res.setHeader('X-Export-Path', artifact.filePath);
+          res.setHeader('X-Export-Rows', artifact.rowCount.toString());
+        }
+        res.send(csvContent);
       } else {
         res.json({
           contacts: contacts.map((c: typeof contacts[0]) => ({
@@ -1839,9 +1849,18 @@ export async function registerRoutes(
           csvRows.push(row.join(','));
         }
         
+        const csvContent = csvRows.join('\n');
+        
+        const artifact = await writeExportArtifact(csvContent, 'job', id, exportRecords.length);
+        
         res.setHeader('Content-Type', 'text/csv');
         res.setHeader('Content-Disposition', `attachment; filename="export-${id}.csv"`);
-        res.send(csvRows.join('\n'));
+        if (artifact) {
+          res.setHeader('X-Export-Filename', artifact.filename);
+          res.setHeader('X-Export-Path', artifact.filePath);
+          res.setHeader('X-Export-Rows', artifact.rowCount.toString());
+        }
+        res.send(csvContent);
       } else {
         // JSON export with schema metadata
         res.json({
@@ -1881,6 +1900,39 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Export error:", error);
       res.status(500).json({ error: "Export failed" });
+    }
+  });
+
+  // List recent export files (protected)
+  app.get("/api/exports", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const exports = await listExportFiles();
+      res.json({
+        exports,
+        count: exports.length,
+      });
+    } catch (error) {
+      console.error("Error listing exports:", error);
+      res.status(500).json({ error: "Failed to list exports" });
+    }
+  });
+
+  // Download a specific export file (protected)
+  app.get("/api/exports/:filename", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { filename } = req.params;
+      
+      const file = await getExportFile(filename);
+      if (!file) {
+        return res.status(404).json({ error: "Export file not found" });
+      }
+      
+      res.setHeader('Content-Type', file.mimeType);
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.send(file.content);
+    } catch (error) {
+      console.error("Error downloading export:", error);
+      res.status(500).json({ error: "Failed to download export" });
     }
   });
 

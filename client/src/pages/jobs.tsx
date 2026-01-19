@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { FileText, Clock, CheckCircle2, XCircle, Loader2, AlertCircle, RefreshCw, RotateCcw, Download } from "lucide-react";
+import { FileText, Clock, CheckCircle2, XCircle, Loader2, AlertCircle, RefreshCw, RotateCcw, Download, ChevronDown, ChevronUp, FolderOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -11,6 +11,14 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { exportFile } from "@/lib/export-utils";
 import type { BulkJob } from "@shared/schema";
+
+interface ExportFile {
+  name: string;
+  createdAt: string;
+  size: number;
+  entityType: string;
+  entityId: string | null;
+}
 
 const statusConfig: Record<string, { icon: React.ElementType; color: string; label: string }> = {
   pending: { icon: Clock, color: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400", label: "Pending" },
@@ -200,6 +208,8 @@ export default function JobsPage() {
             ))}
           </div>
         )}
+        
+        <RecentExportsPanel />
       </div>
     </div>
   );
@@ -344,6 +354,117 @@ function JobCard({ job, onRetry, isRetrying }: {
           </div>
         </div>
       </CardContent>
+    </Card>
+  );
+}
+
+function RecentExportsPanel() {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const { toast } = useToast();
+  
+  const { data, isLoading, error } = useQuery<{ exports: ExportFile[]; count: number }>({
+    queryKey: ["/api/exports"],
+    enabled: isExpanded,
+  });
+  
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+  
+  const handleDownload = async (filename: string) => {
+    try {
+      const a = document.createElement('a');
+      a.href = `/api/exports/${filename}`;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      toast({
+        title: "Download Started",
+        description: `Downloading ${filename}`,
+      });
+    } catch (error) {
+      toast({
+        title: "Download Failed",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
+  
+  return (
+    <Card className="mt-6" data-testid="panel-recent-exports">
+      <CardHeader className="cursor-pointer pb-3" onClick={() => setIsExpanded(!isExpanded)}>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <FolderOpen className="h-5 w-5 text-muted-foreground" />
+            <CardTitle className="text-base">Recent Exports</CardTitle>
+            <Badge variant="secondary" className="text-xs">Debug</Badge>
+          </div>
+          <Button variant="ghost" size="icon" data-testid="button-toggle-exports">
+            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </Button>
+        </div>
+      </CardHeader>
+      
+      {isExpanded && (
+        <CardContent className="pt-0">
+          {isLoading && (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-10 w-full" />
+              ))}
+            </div>
+          )}
+          
+          {error && (
+            <div className="text-sm text-destructive">
+              Failed to load exports: {error instanceof Error ? error.message : "Unknown error"}
+            </div>
+          )}
+          
+          {data && data.exports.length === 0 && (
+            <div className="py-4 text-center text-sm text-muted-foreground">
+              No export files found. Run an export to see files here.
+            </div>
+          )}
+          
+          {data && data.exports.length > 0 && (
+            <div className="space-y-2">
+              {data.exports.map((file) => (
+                <div
+                  key={file.name}
+                  className="flex items-center justify-between gap-2 rounded-md border p-3 text-sm hover-elevate"
+                  data-testid={`export-file-${file.name}`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium truncate">{file.name}</div>
+                    <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
+                      <span>{formatFileSize(file.size)}</span>
+                      <span>{formatDistanceToNow(new Date(file.createdAt), { addSuffix: true })}</span>
+                      {file.entityType && (
+                        <Badge variant="outline" className="text-xs">
+                          {file.entityType}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleDownload(file.name)}
+                    data-testid={`button-download-${file.name}`}
+                  >
+                    <Download className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      )}
     </Card>
   );
 }
