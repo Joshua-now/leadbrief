@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { formatDistanceToNow, format } from "date-fns";
 import { Users, Mail, Phone, Building2, Linkedin, Search, RefreshCw, AlertCircle, MapPin, Globe, Tag, Download, Loader2, X, Calendar, Clock, Eye, ExternalLink, Briefcase } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -364,40 +364,60 @@ function ContactDetailModal({
   const [contact, setContact] = useState<ContactWithCompany | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
-  const fetchContact = async (id: string) => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const response = await apiGet(`/api/contacts/${id}`);
-      
-      if (response.status === 404) {
-        setError("Contact not found");
-        setContact(null);
-        return;
-      }
-      
-      if (!response.ok) {
-        const errBody = await response.json().catch(() => ({}));
-        setError(errBody.error || "Could not load contact");
-        setContact(null);
-        return;
-      }
-      
-      const data = await response.json();
-      setContact(data);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load contact");
-      setContact(null);
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (!open || !contactId) {
+      return;
     }
-  };
 
-  if (open && contactId && !loading && !contact && !error) {
-    fetchContact(contactId);
-  }
+    let cancelled = false;
+    
+    const fetchContact = async () => {
+      setLoading(true);
+      setError(null);
+      
+      try {
+        const response = await apiGet(`/api/contacts/${contactId}`);
+        
+        if (cancelled) return;
+        
+        if (response.status === 404) {
+          setError("Contact not found");
+          setContact(null);
+          return;
+        }
+        
+        if (!response.ok) {
+          const errBody = await response.json().catch(() => ({}));
+          setError(errBody.error || "Could not load contact");
+          setContact(null);
+          return;
+        }
+        
+        const data = await response.json();
+        setContact(data);
+      } catch (e) {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : "Could not load contact");
+        setContact(null);
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchContact();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, contactId, retryCount]);
+
+  const handleRetry = () => {
+    setRetryCount(prev => prev + 1);
+  };
 
   const handleClose = () => {
     setContact(null);
@@ -452,7 +472,7 @@ function ContactDetailModal({
               variant="outline" 
               size="sm" 
               className="mt-4" 
-              onClick={() => contactId && fetchContact(contactId)}
+              onClick={handleRetry}
               data-testid="button-retry-contact"
             >
               <RefreshCw className="mr-2 h-4 w-4" />
