@@ -251,7 +251,7 @@ function JobCard({ job, onRetry, isRetrying }: {
   const canRetry = job.status === "failed" || (job.status === "complete" && (job.failed || 0) > 0);
   const canExport = job.status === "complete" || job.status === "completed";
 
-  const handleExport = async (format: 'csv' | 'json') => {
+  const handleExport = async (format: 'csv' | 'json', scope: 'full' | 'core' = 'full') => {
     if ((job.successful || 0) === 0) {
       toast({ 
         title: "No Data to Export", 
@@ -262,10 +262,11 @@ function JobCard({ job, onRetry, isRetrying }: {
     }
     
     setIsExporting(true);
+    const prefix = scope === 'core' ? 'core-' : '';
     const result = await exportFile({
-      endpoint: `/api/jobs/${job.id}/export`,
+      endpoint: `/api/jobs/${job.id}/export?scope=${scope}`,
       format,
-      filename: `export-${job.id}.${format}`,
+      filename: `${prefix}export-${job.id}.${format}`,
     });
     setIsExporting(false);
     
@@ -340,9 +341,23 @@ function JobCard({ job, onRetry, isRetrying }: {
             {canExport && (
               <>
                 <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => handleExport('csv', 'core')}
+                  disabled={isExporting}
+                  data-testid={`button-export-core-${job.id}`}
+                >
+                  {isExporting ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="mr-2 h-4 w-4" />
+                  )}
+                  Core CSV
+                </Button>
+                <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => handleExport('csv')}
+                  onClick={() => handleExport('csv', 'full')}
                   disabled={isExporting}
                   data-testid={`button-export-csv-${job.id}`}
                 >
@@ -351,12 +366,12 @@ function JobCard({ job, onRetry, isRetrying }: {
                   ) : (
                     <Download className="mr-2 h-4 w-4" />
                   )}
-                  {isExporting ? 'Exporting...' : 'CSV'}
+                  Full CSV
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => handleExport('json')}
+                  onClick={() => handleExport('json', 'full')}
                   disabled={isExporting}
                   data-testid={`button-export-json-${job.id}`}
                 >

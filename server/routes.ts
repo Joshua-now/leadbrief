@@ -1681,8 +1681,9 @@ export async function registerRoutes(
     try {
       const { id } = req.params;
       const format = (req.query.format as string) || 'json';
+      const scope = (req.query.scope as string) || 'full'; // 'full' or 'core'
       
-      console.log(`[Export] Job export requested: job=${id}, format=${format}, user=${userId}`);
+      console.log(`[Export] Job export requested: job=${id}, format=${format}, scope=${scope}, user=${userId}`);
       
       if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
         console.log(`[Export] Invalid job ID format: ${id}`);
@@ -1835,52 +1836,77 @@ export async function registerRoutes(
       console.log(`[Export Stats] total_rows=${exportRecords.length}, website_present=${websitePresentCount}, scrape_success_200=${scrapeSuccessCount}, bullets_present=${bulletsPresentCount}, avg_confidence=${avgConfidence}`);
 
       if (format === 'csv') {
-        // Generate CSV
-        const headers = [
-          'company_name', 'website', 'city', 'state', 'category', 'services',
-          'personalization_bullet_1', 'personalization_bullet_2', 'personalization_bullet_3', 'personalization_bullet_4',
-          'icebreaker', 'confidence_score', 'confidence_rationale',
-          'scrape_url', 'scrape_status',
-          'email', 'phone', 'first_name', 'last_name', 'title'
-        ];
+        let headers: string[];
+        let csvRows: string[];
+        let filenamePrefix: string;
         
-        const csvRows = [headers.join(',')];
-        
-        for (const record of exportRecords) {
-          const bullets = record.personalization_bullets || [];
-          const source = record.scrape_sources[0] || { url: '', statusCode: 0 };
+        if (scope === 'core') {
+          // Core export: Only canonical 5 fields + state/category (outreach-ready)
+          headers = ['company_name', 'city', 'email', 'phone', 'website', 'state', 'category'];
+          csvRows = [headers.join(',')];
           
-          const row = [
-            escapeCSV(record.company_name as string | null),
-            escapeCSV(record.website as string | null),
-            escapeCSV(record.city as string | null),
-            escapeCSV(record.state as string | null),
-            escapeCSV(record.category as string | null),
-            escapeCSV(record.services as string | null),
-            escapeCSV(bullets[0] || ''),
-            escapeCSV(bullets[1] || ''),
-            escapeCSV(bullets[2] || ''),
-            escapeCSV(bullets[3] || ''),
-            escapeCSV(record.icebreaker),
-            record.confidence_score.toString(),
-            escapeCSV(record.confidence_rationale),
-            escapeCSV(source.url),
-            source.statusCode?.toString() || '',
-            escapeCSV(record.email),
-            escapeCSV(record.phone),
-            escapeCSV(record.first_name),
-            escapeCSV(record.last_name),
-            escapeCSV(record.title),
+          for (const record of exportRecords) {
+            const row = [
+              escapeCSV(record.company_name as string | null),
+              escapeCSV(record.city as string | null),
+              escapeCSV(record.email),
+              escapeCSV(record.phone),
+              escapeCSV(record.website as string | null),
+              escapeCSV(record.state as string | null),
+              escapeCSV(record.category as string | null),
+            ];
+            csvRows.push(row.join(','));
+          }
+          filenamePrefix = 'core-export';
+        } else {
+          // Full export with all fields
+          headers = [
+            'company_name', 'website', 'city', 'state', 'category', 'services',
+            'personalization_bullet_1', 'personalization_bullet_2', 'personalization_bullet_3', 'personalization_bullet_4',
+            'icebreaker', 'confidence_score', 'confidence_rationale',
+            'scrape_url', 'scrape_status',
+            'email', 'phone', 'first_name', 'last_name', 'title'
           ];
-          csvRows.push(row.join(','));
+          
+          csvRows = [headers.join(',')];
+          
+          for (const record of exportRecords) {
+            const bullets = record.personalization_bullets || [];
+            const source = record.scrape_sources[0] || { url: '', statusCode: 0 };
+            
+            const row = [
+              escapeCSV(record.company_name as string | null),
+              escapeCSV(record.website as string | null),
+              escapeCSV(record.city as string | null),
+              escapeCSV(record.state as string | null),
+              escapeCSV(record.category as string | null),
+              escapeCSV(record.services as string | null),
+              escapeCSV(bullets[0] || ''),
+              escapeCSV(bullets[1] || ''),
+              escapeCSV(bullets[2] || ''),
+              escapeCSV(bullets[3] || ''),
+              escapeCSV(record.icebreaker),
+              record.confidence_score.toString(),
+              escapeCSV(record.confidence_rationale),
+              escapeCSV(source.url),
+              source.statusCode?.toString() || '',
+              escapeCSV(record.email),
+              escapeCSV(record.phone),
+              escapeCSV(record.first_name),
+              escapeCSV(record.last_name),
+              escapeCSV(record.title),
+            ];
+            csvRows.push(row.join(','));
+          }
+          filenamePrefix = 'export';
         }
         
         const csvContent = csvRows.join('\n');
         
-        const artifact = await writeExportArtifact(csvContent, 'job', id, exportRecords.length);
+        const artifact = await writeExportArtifact(csvContent, scope === 'core' ? 'core' : 'job', id, exportRecords.length);
         
         res.setHeader('Content-Type', 'text/csv');
-        res.setHeader('Content-Disposition', `attachment; filename="export-${id}.csv"`);
+        res.setHeader('Content-Disposition', `attachment; filename="${filenamePrefix}-${id}.csv"`);
         if (artifact) {
           res.setHeader('X-Export-Filename', artifact.filename);
           res.setHeader('X-Export-Path', artifact.filePath);
@@ -1888,45 +1914,78 @@ export async function registerRoutes(
         }
         
         const duration = Date.now() - startTime;
-        console.log(`[Export Complete] job=${id}, format=csv, rows=${exportRecords.length}, status=200, duration=${duration}ms, user=${userId}, artifact=${artifact?.filename || 'none'}`);
+        console.log(`[Export Complete] job=${id}, format=csv, scope=${scope}, rows=${exportRecords.length}, status=200, duration=${duration}ms, user=${userId}, artifact=${artifact?.filename || 'none'}`);
         res.send(csvContent);
       } else {
         // JSON export with schema metadata
         const duration = Date.now() - startTime;
-        console.log(`[Export Complete] job=${id}, format=json, rows=${exportRecords.length}, status=200, duration=${duration}ms, user=${userId}`);
-        res.json({
-          job: {
-            id: job.id,
-            name: job.name,
-            status: job.status,
-            totalRecords: job.totalRecords,
-            successful: job.successful,
-            failed: job.failed,
-            duplicatesFound: job.duplicatesFound,
-            createdAt: job.createdAt,
-            completedAt: job.completedAt,
-          },
-          schema: {
-            company_name: 'string | null',
-            website: 'string | null',
-            city: 'string | null',
-            state: 'string | null',
-            category: 'string | null',
-            services: 'string | null (comma-separated)',
-            personalization_bullets: 'string[] (2-4 items)',
-            icebreaker: 'string | null',
-            confidence_score: 'number (0-1)',
-            confidence_rationale: 'string | null',
-            scrape_sources: 'Array<{url: string, statusCode: number, success: boolean, error?: string}>',
-            email: 'string | null',
-            phone: 'string | null',
-            first_name: 'string | null',
-            last_name: 'string | null',
-            title: 'string | null',
-          },
-          records: exportRecords,
-          exportedAt: new Date().toISOString(),
-        });
+        console.log(`[Export Complete] job=${id}, format=json, scope=${scope}, rows=${exportRecords.length}, status=200, duration=${duration}ms, user=${userId}`);
+        
+        if (scope === 'core') {
+          // Core JSON export: Only canonical 5 fields + state/category
+          const coreRecords = exportRecords.map(r => ({
+            company_name: r.company_name,
+            city: r.city,
+            email: r.email,
+            phone: r.phone,
+            website: r.website,
+            state: r.state,
+            category: r.category,
+          }));
+          
+          res.json({
+            job: {
+              id: job.id,
+              name: job.name,
+              status: job.status,
+            },
+            schema: {
+              company_name: 'string | null',
+              city: 'string | null',
+              email: 'string | null',
+              phone: 'string | null',
+              website: 'string | null',
+              state: 'string | null',
+              category: 'string | null',
+            },
+            records: coreRecords,
+            exportedAt: new Date().toISOString(),
+          });
+        } else {
+          res.json({
+            job: {
+              id: job.id,
+              name: job.name,
+              status: job.status,
+              totalRecords: job.totalRecords,
+              successful: job.successful,
+              failed: job.failed,
+              duplicatesFound: job.duplicatesFound,
+              createdAt: job.createdAt,
+              completedAt: job.completedAt,
+            },
+            schema: {
+              company_name: 'string | null',
+              website: 'string | null',
+              city: 'string | null',
+              state: 'string | null',
+              category: 'string | null',
+              services: 'string | null (comma-separated)',
+              personalization_bullets: 'string[] (2-4 items)',
+              icebreaker: 'string | null',
+              confidence_score: 'number (0-1)',
+              confidence_rationale: 'string | null',
+              scrape_sources: 'Array<{url: string, statusCode: number, success: boolean, error?: string}>',
+              email: 'string | null',
+              phone: 'string | null',
+              first_name: 'string | null',
+              last_name: 'string | null',
+              title: 'string | null',
+            },
+            records: exportRecords,
+            exportedAt: new Date().toISOString(),
+          });
+        }
       }
     } catch (error) {
       const duration = Date.now() - startTime;
