@@ -1922,15 +1922,15 @@ export async function registerRoutes(
         console.log(`[Export Complete] job=${id}, format=json, scope=${scope}, rows=${exportRecords.length}, status=200, duration=${duration}ms, user=${userId}`);
         
         if (scope === 'core') {
-          // Core JSON export: Only canonical 5 fields + state/category
+          // Core JSON export: Only canonical 5 fields + state/category (always include keys even if null)
           const coreRecords = exportRecords.map(r => ({
-            company_name: r.company_name,
-            city: r.city,
-            email: r.email,
-            phone: r.phone,
-            website: r.website,
-            state: r.state,
-            category: r.category,
+            company_name: r.company_name ?? null,
+            city: r.city ?? null,
+            email: r.email ?? null,
+            phone: r.phone ?? null,
+            website: r.website ?? null,
+            state: r.state ?? null,
+            category: r.category ?? null,
           }));
           
           res.json({
@@ -1938,6 +1938,12 @@ export async function registerRoutes(
               id: job.id,
               name: job.name,
               status: job.status,
+              totalRecords: job.totalRecords,
+              successful: job.successful,
+              failed: job.failed,
+              duplicatesFound: job.duplicatesFound,
+              createdAt: job.createdAt,
+              completedAt: job.completedAt,
             },
             schema: {
               company_name: 'string | null',
@@ -1948,6 +1954,7 @@ export async function registerRoutes(
               state: 'string | null',
               category: 'string | null',
             },
+            scope: 'core',
             records: coreRecords,
             exportedAt: new Date().toISOString(),
           });
@@ -1982,6 +1989,7 @@ export async function registerRoutes(
               last_name: 'string | null',
               title: 'string | null',
             },
+            scope: 'full',
             records: exportRecords,
             exportedAt: new Date().toISOString(),
           });
