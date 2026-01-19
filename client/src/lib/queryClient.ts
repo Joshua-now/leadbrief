@@ -1,12 +1,10 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { getAccessToken, ensureSupabaseConfigured } from "./supabase";
-import { triggerSessionExpired } from "@/lib/session-manager";
+import { triggerSessionExpired, trySilentRefresh } from "@/lib/session-manager";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
-    if (res.status === 401) {
-      triggerSessionExpired();
-    }
+    // Don't trigger session expired here - let the caller handle 401 with retry
     const text = (await res.text()) || res.statusText;
     throw new Error(`${res.status}: ${text}`);
   }
@@ -30,18 +28,38 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  const authHeaders = await getAuthHeaders();
-  const headers: HeadersInit = {
-    ...authHeaders,
-    ...(data ? { "Content-Type": "application/json" } : {}),
+  const makeRequest = async () => {
+    const authHeaders = await getAuthHeaders();
+    const headers: HeadersInit = {
+      ...authHeaders,
+      ...(data ? { "Content-Type": "application/json" } : {}),
+    };
+    
+    return fetch(url, {
+      method,
+      headers,
+      body: data ? JSON.stringify(data) : undefined,
+      credentials: "include",
+    });
   };
   
-  const res = await fetch(url, {
-    method,
-    headers,
-    body: data ? JSON.stringify(data) : undefined,
-    credentials: "include",
-  });
+  let res = await makeRequest();
+  
+  // On 401, try silent refresh first
+  if (res.status === 401) {
+    console.log(`[API] Got 401 on ${method} ${url}, attempting silent refresh...`);
+    const refreshed = await trySilentRefresh();
+    
+    if (refreshed) {
+      console.log(`[API] Session refreshed, retrying request...`);
+      res = await makeRequest();
+    }
+    
+    // If still 401 after refresh, trigger session expired
+    if (res.status === 401) {
+      triggerSessionExpired();
+    }
+  }
 
   await throwIfResNotOk(res);
   return res;
@@ -53,17 +71,34 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const authHeaders = await getAuthHeaders();
+    const url = queryKey.join("/") as string;
     
-    const res = await fetch(queryKey.join("/") as string, {
-      credentials: "include",
-      headers: authHeaders,
-    });
+    const makeRequest = async () => {
+      const authHeaders = await getAuthHeaders();
+      return fetch(url, {
+        credentials: "include",
+        headers: authHeaders,
+      });
+    };
+    
+    let res = await makeRequest();
 
+    // On 401, try silent refresh first - NO UI interruption
     if (res.status === 401) {
-      triggerSessionExpired();
-      if (unauthorizedBehavior === "returnNull") {
-        return null;
+      console.log(`[Query] Got 401 on ${url}, attempting silent refresh...`);
+      const refreshed = await trySilentRefresh();
+      
+      if (refreshed) {
+        console.log(`[Query] Session refreshed, retrying query...`);
+        res = await makeRequest();
+      }
+      
+      // If still 401 after refresh attempt
+      if (res.status === 401) {
+        triggerSessionExpired();
+        if (unauthorizedBehavior === "returnNull") {
+          return null;
+        }
       }
     }
 

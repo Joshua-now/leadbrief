@@ -1,0 +1,103 @@
+Problem
+When clicking export/record actions, the UI sometimes shows:
+
+“Session expired, log in”
+
+even though the user is already logged in. This is disruptive and incorrect UX.
+
+Goal
+Make auth handling smooth, silent, and user-friendly:
+
+Do NOT prompt the user unless absolutely necessary
+
+Automatically recover expired Supabase sessions
+
+Never show raw auth errors during normal usage
+
+1) Implement silent session refresh FIRST
+
+For any API call (especially exports, record actions, downloads):
+
+If response is 401 Unauthorized:
+
+Call:
+
+await supabase.auth.refreshSession()
+
+
+Retry the original request once
+
+Only if retry fails → treat as real logout
+
+The user should never see a modal/toast during step 1–2.
+
+2) Distinguish “expired” vs “unauthenticated”
+
+Do NOT show “Session expired” unless:
+
+refreshSession fails or
+
+Supabase reports INVALID_REFRESH_TOKEN
+
+If the user still has a valid Supabase session, handle it silently.
+
+3) Change UI messaging hierarchy
+
+Replace current behavior:
+
+❌ “Session expired, log in” (immediate)
+
+With:
+
+✅ Silent retry
+→ success → continue export
+→ failure → show single, calm message:
+
+“Your session expired. Please log in again.”
+
+No extra buttons, no panic, no modal spam.
+
+4) Never show provider/internal messages to users
+
+Messages like:
+
+{"provider":"supabase","message":"Use the frontend login form"}
+
+
+must:
+
+be logged to console (for devs)
+
+NEVER be shown to users
+
+be translated to a friendly message only if needed
+
+5) Ensure export/download UX is interruption-free
+
+For exports specifically:
+
+Prefer fetch + blob so auth headers are preserved
+
+Do not redirect the browser to a protected endpoint that can return auth JSON
+
+Do not navigate away from the page during export
+
+The user clicks → file downloads → done.
+
+6) Acceptance criteria (must all pass)
+
+Clicking export while logged in NEVER shows “session expired”
+
+Expired tokens are refreshed silently
+
+Only truly logged-out users are redirected
+
+No raw Supabase/provider messages appear in UI
+
+Works consistently for:
+
+Jobs exports
+
+Contacts exports
+
+Reports/record actions

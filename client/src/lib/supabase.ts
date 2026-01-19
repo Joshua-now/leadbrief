@@ -188,3 +188,40 @@ export async function getUser() {
   const { data: { user } } = await client.auth.getUser();
   return user;
 }
+
+// Silent session refresh - returns true if session was refreshed successfully
+export async function refreshSession(): Promise<boolean> {
+  await fetchSupabaseConfig();
+  const client = getSupabaseClient();
+  if (!client) {
+    console.log('[Supabase] No client, cannot refresh session');
+    return false;
+  }
+  
+  try {
+    console.log('[Supabase] Attempting silent session refresh...');
+    const { data, error } = await client.auth.refreshSession();
+    
+    if (error) {
+      console.error('[Supabase] Refresh failed:', error.message);
+      // Check for invalid refresh token
+      if (error.message.includes('INVALID_REFRESH_TOKEN') || 
+          error.message.includes('invalid') ||
+          error.message.includes('expired')) {
+        return false;
+      }
+      return false;
+    }
+    
+    if (data.session) {
+      console.log('[Supabase] Session refreshed successfully');
+      return true;
+    }
+    
+    console.log('[Supabase] No session after refresh');
+    return false;
+  } catch (e) {
+    console.error('[Supabase] Refresh exception:', e);
+    return false;
+  }
+}
