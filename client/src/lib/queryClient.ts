@@ -1,8 +1,12 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { getAccessToken, ensureSupabaseConfigured } from "./supabase";
+import { triggerSessionExpired } from "@/lib/session-manager";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
+    if (res.status === 401) {
+      triggerSessionExpired();
+    }
     const text = (await res.text()) || res.statusText;
     throw new Error(`${res.status}: ${text}`);
   }
@@ -56,8 +60,11 @@ export const getQueryFn: <T>(options: {
       headers: authHeaders,
     });
 
-    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      return null;
+    if (res.status === 401) {
+      if (unauthorizedBehavior === "returnNull") {
+        return null;
+      }
+      triggerSessionExpired();
     }
 
     await throwIfResNotOk(res);

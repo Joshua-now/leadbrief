@@ -1,4 +1,5 @@
 import { toast } from "@/hooks/use-toast";
+import { triggerSessionExpired } from "@/lib/session-manager";
 
 export interface ExportOptions {
   endpoint: string;
@@ -29,14 +30,9 @@ export async function exportFile(options: ExportOptions): Promise<ExportResult> 
     console.log(`[Export] Response status: ${response.status} ${response.statusText}`);
     
     if (response.status === 401) {
-      const errorMsg = 'Session expired (401 Unauthorized). Please log in again.';
-      console.error(`[Export] Auth error: ${errorMsg}`);
-      toast({
-        title: "Export Failed",
-        description: errorMsg,
-        variant: "destructive",
-      });
-      return { success: false, error: errorMsg };
+      console.error(`[Export] Auth error: Session expired`);
+      triggerSessionExpired();
+      return { success: false, error: 'Session expired' };
     }
     
     if (response.status === 404) {
