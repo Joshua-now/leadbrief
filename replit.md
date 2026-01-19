@@ -133,6 +133,7 @@ The backend uses a modular route registration pattern with dedicated storage abs
 | `/api/health` | GET | System health check (liveness) |
 | `/api/ready` | GET | Dependency readiness check |
 | `/api/debug/session` | GET | Debug auth state (protected) - returns userId, email, provider, session expiry |
+| `/api/debug/whoami` | GET | Auth diagnostics (no auth required) - returns provider, token status, session info |
 | `/api/finalcheck` | GET | Comprehensive verification (tests health, ready, intake auth, DB write) |
 | `/api/config/limits` | GET | Get import limits |
 | `/api/jobs/:id/export` | GET | Export job results (CSV/JSON) - returns structured noData response if empty |
