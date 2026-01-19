@@ -128,6 +128,9 @@ export default function ContactsPage() {
   }
 
   if (error) {
+    const isAuthError = error instanceof Error && 
+      (error.message.includes('401') || error.message.includes('Unauthorized') || error.message.includes('unauthorized'));
+    
     return (
       <div className="flex-1 overflow-auto p-6">
         <div className="mx-auto max-w-5xl">
@@ -135,15 +138,25 @@ export default function ContactsPage() {
             <CardContent className="flex items-center gap-4 py-6">
               <AlertCircle className="h-8 w-8 text-destructive" />
               <div className="flex-1">
-                <p className="font-medium">Failed to load contacts</p>
+                <p className="font-medium">
+                  {isAuthError ? "Session expired" : "Failed to load contacts"}
+                </p>
                 <p className="text-sm text-muted-foreground">
-                  {error instanceof Error ? error.message : "Unknown error"}
+                  {isAuthError 
+                    ? "Your session has ended. Please log in again to continue."
+                    : (error instanceof Error ? error.message : "Unknown error")}
                 </p>
               </div>
-              <Button variant="outline" onClick={() => refetch()} data-testid="button-retry">
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Retry
-              </Button>
+              {isAuthError ? (
+                <Button variant="default" onClick={() => window.location.href = '/api/login'} data-testid="button-login">
+                  Log In
+                </Button>
+              ) : (
+                <Button variant="outline" onClick={() => refetch()} data-testid="button-retry">
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Retry
+                </Button>
+              )}
             </CardContent>
           </Card>
         </div>

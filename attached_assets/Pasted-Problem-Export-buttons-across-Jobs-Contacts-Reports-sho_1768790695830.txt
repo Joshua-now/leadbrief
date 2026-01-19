@@ -1,0 +1,83 @@
+Problem
+Export buttons across Jobs/Contacts/Reports show failure notices. Sometimes it says “no reports to export” even when UI shows completed jobs/records. Sometimes export times out or fails mid-session. I need this fixed across all export buttons, not just one.
+
+Required Work
+
+1) Audit & fix EVERY export button
+
+Search the frontend for any export/download triggers (buttons, icons, menu items). Ensure every one calls a real export handler and none are placeholders/no-ops.
+
+Standardize all export actions to use a shared function like exportFile({ type, id, format }) so they can’t drift.
+
+2) Add real diagnostics to failure toasts
+
+When an export fails, show:
+
+HTTP status code
+
+response text (first 200 chars)
+
+endpoint URL that was called
+
+This should appear in console logs at minimum, and a user-friendly toast like:
+
+“Export failed (401 Unauthorized). Please log in again.”
+
+“Export failed (504 Timeout). Try again / reduce scope.”
+
+3) Fix auth/session issues (most likely cause)
+
+Confirm exports send credentials correctly:
+
+If using fetch(), it must include:
+
+credentials: "include"
+
+
+If using Supabase JWT header auth instead of cookies, attach Authorization: Bearer <token> consistently for exports too.
+
+Make sure the UI base URL points to the backend service that actually serves /api/* (no SPA index.html responses).
+
+4) Fix “No reports to export” mismatch
+
+Instrument export endpoints to log counts:
+
+total jobs/items found
+
+number of completed items exported
+
+what filters are applied (status === 'complete', etc.)
+
+If UI says job is complete but export returns 0, update logic to match actual statuses used in DB (e.g. complete vs completed), or fall back to exporting “successful items” rather than strict string match.
+
+5) Fix timeout behavior
+
+If export is large/slow:
+
+Prefer window.location.href = exportUrl for downloads (no JS timeout issues)
+
+OR increase fetch timeout / avoid custom timeout logic
+
+Ensure server streams CSV rather than building huge string in memory (if relevant)
+
+6) Validate every export path in production
+
+For each export button (Jobs, Contacts, Reports):
+
+Click → confirm Network shows 200
+
+Confirm correct content-type (CSV/JSON)
+
+Confirm response is not HTML
+
+Confirm file downloads and contains rows
+
+Acceptance Criteria
+
+All export buttons work reliably
+
+No “no data” false negatives when UI shows data exists
+
+Failures show actionable reason (status + message)
+
+No session timeout issues; user is prompted to re-auth if needed
