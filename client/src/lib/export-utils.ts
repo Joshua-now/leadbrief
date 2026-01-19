@@ -13,7 +13,10 @@ export interface ExportResult {
 
 export async function exportFile(options: ExportOptions): Promise<ExportResult> {
   const { endpoint, format, filename } = options;
-  const url = `${endpoint}?format=${format}`;
+  
+  // Properly handle URLs that may already have query parameters
+  const separator = endpoint.includes('?') ? '&' : '?';
+  const url = `${endpoint}${separator}format=${format}`;
   
   console.log(`[Export] Starting export: ${url}`);
   
