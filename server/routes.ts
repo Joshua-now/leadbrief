@@ -166,6 +166,21 @@ export async function registerRoutes(
     });
   });
   
+  // Helper: Normalize URL to https:// format
+  function normalizeUrl(url: string | null | undefined): string | null {
+    if (!url || typeof url !== 'string') return null;
+    const trimmed = url.trim();
+    if (!trimmed) return null;
+    
+    // Already has protocol
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return trimmed.startsWith('http://') ? trimmed.replace('http://', 'https://') : trimmed;
+    }
+    
+    // Add https:// prefix
+    return `https://${trimmed}`;
+  }
+
   // Debug whoami endpoint - detailed auth diagnostics (does not require auth)
   app.get("/api/debug/whoami", async (req: Request, res: Response) => {
     const authHeader = req.headers.authorization;
@@ -220,6 +235,124 @@ export async function registerRoutes(
       email,
       checkedAt: new Date().toISOString(),
     });
+  });
+
+  // Export health endpoint - comprehensive export data verification
+  app.get("/api/debug/export-health", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      // Get DB counts
+      const jobsCount = await db.select({ count: db.$count(bulkJobs) }).from(bulkJobs);
+      const itemsCount = await db.select({ count: db.$count(bulkJobItems) }).from(bulkJobItems);
+      const contactsCount = await db.select({ count: db.$count(contacts) }).from(contacts);
+      const companiesCount = await db.select({ count: db.$count(companies) }).from(companies);
+      
+      // Find most recent completed job
+      const recentJobs = await db
+        .select()
+        .from(bulkJobs)
+        .where(eq(bulkJobs.status, 'complete'))
+        .orderBy(bulkJobs.createdAt)
+        .limit(1);
+      
+      const recentJob = recentJobs[0] || null;
+      
+      let exportStats = {
+        jobId: null as string | null,
+        jobName: null as string | null,
+        rawItemCount: 0,
+        deduplicatedCount: 0,
+        duplicatesRemoved: 0,
+        withWebsite: 0,
+        withCompanyName: 0,
+        withPersonalization: 0,
+        withConfidenceScore: 0,
+      };
+      
+      if (recentJob) {
+        const items = await storage.getBulkJobItems(recentJob.id);
+        const completedItems = items.filter(item => item.status === 'complete' || item.status === 'completed');
+        
+        // Build raw records (same logic as export)
+        const rawRecords = completedItems.map(item => {
+          const parsed = item.parsedData as Record<string, string> | null;
+          const enrichment = item.enrichmentData as Record<string, unknown> | null;
+          const domainDiscovery = enrichment?.domainDiscovery as { domain?: string } | null;
+          
+          return {
+            company_name: enrichment?.companyName || parsed?.company || parsed?.companyName || null,
+            website: normalizeUrl(domainDiscovery?.domain || parsed?.companyDomain || parsed?.websiteUrl || parsed?.website),
+            personalization_bullets: item.personalizationBullets || [],
+            confidence_score: item.confidenceScore ? parseFloat(item.confidenceScore) : 0,
+            email: parsed?.email || null,
+            phone: parsed?.phone || null,
+            city: parsed?.city || null,
+          };
+        });
+        
+        // Apply dedupe (same logic as export)
+        const seenPhones = new Set<string>();
+        const seenEmails = new Set<string>();
+        const seenCompanyCities = new Set<string>();
+        const deduplicatedRecords = rawRecords.filter(record => {
+          const phoneNorm = typeof record.phone === 'string' ? record.phone.replace(/\D/g, '') : null;
+          const hasPhone = phoneNorm && phoneNorm.length >= 7;
+          const emailNorm = typeof record.email === 'string' ? record.email.toLowerCase() : null;
+          const companyNorm = typeof record.company_name === 'string' ? record.company_name.toLowerCase().trim() : null;
+          const cityNorm = typeof record.city === 'string' ? record.city.toLowerCase().trim() : null;
+          const companyCityKey = (companyNorm && cityNorm) ? `${companyNorm}|${cityNorm}` : null;
+          
+          let isDuplicate = false;
+          if (hasPhone && seenPhones.has(phoneNorm)) isDuplicate = true;
+          if (emailNorm && seenEmails.has(emailNorm)) isDuplicate = true;
+          if (companyCityKey && seenCompanyCities.has(companyCityKey)) isDuplicate = true;
+          
+          if (isDuplicate) return false;
+          
+          if (hasPhone) seenPhones.add(phoneNorm);
+          if (emailNorm) seenEmails.add(emailNorm);
+          if (companyCityKey) seenCompanyCities.add(companyCityKey);
+          return true;
+        });
+        
+        exportStats = {
+          jobId: recentJob.id,
+          jobName: recentJob.name,
+          rawItemCount: rawRecords.length,
+          deduplicatedCount: deduplicatedRecords.length,
+          duplicatesRemoved: rawRecords.length - deduplicatedRecords.length,
+          withWebsite: deduplicatedRecords.filter(r => !!r.website).length,
+          withCompanyName: deduplicatedRecords.filter(r => !!r.company_name).length,
+          withPersonalization: deduplicatedRecords.filter(r => r.personalization_bullets.length > 0).length,
+          withConfidenceScore: deduplicatedRecords.filter(r => r.confidence_score > 0).length,
+        };
+      }
+      
+      res.json({
+        counts: {
+          bulk_jobs: Number(jobsCount[0]?.count || 0),
+          bulk_job_items: Number(itemsCount[0]?.count || 0),
+          contacts: Number(contactsCount[0]?.count || 0),
+          companies: Number(companiesCount[0]?.count || 0),
+        },
+        mostRecentCompletedJob: exportStats,
+        dataQuality: {
+          hasRealData: exportStats.deduplicatedCount > 0,
+          websiteCoverage: exportStats.deduplicatedCount > 0 
+            ? Math.round((exportStats.withWebsite / exportStats.deduplicatedCount) * 100) 
+            : 0,
+          companyCoverage: exportStats.deduplicatedCount > 0 
+            ? Math.round((exportStats.withCompanyName / exportStats.deduplicatedCount) * 100) 
+            : 0,
+          personalizationCoverage: exportStats.deduplicatedCount > 0 
+            ? Math.round((exportStats.withPersonalization / exportStats.deduplicatedCount) * 100) 
+            : 0,
+        },
+        checkedAt: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error('[ExportHealth] Error:', error);
+      res.status(500).json({ error: error.message || 'Export health check failed' });
+    }
   });
 
   // Final verification endpoint - comprehensive system check
@@ -1592,7 +1725,7 @@ export async function registerRoutes(
         
         return {
           company_name: enrichment?.companyName || parsed?.company || parsed?.companyName || null,
-          website: domainDiscovery?.domain || parsed?.companyDomain || parsed?.websiteUrl || parsed?.website || null,
+          website: normalizeUrl(domainDiscovery?.domain || parsed?.companyDomain || parsed?.websiteUrl || parsed?.website),
           city: enrichment?.city || parsed?.city || null,
           state: enrichment?.state || null,
           category: enrichment?.industry || null,

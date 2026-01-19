@@ -1,0 +1,73 @@
+We’ve improved export-time dedupe (“first-in wins, claim all identifiers”) and surfaced domain discovery into website. Before I push to GitHub/Railway, please do a final usability hardening pass with the following requirements:
+
+A) Contact Detail View (required)
+
+Bug/Gap: On the Contacts page, clicking an individual contact does nothing.
+Goal: Clicking a contact row should open a details view showing that contact’s full info.
+
+Requirements
+
+Make contact rows clickable (or add a clear “View” button).
+
+Implement a Contact Details screen OR modal (either is fine).
+
+It must fetch and display:
+
+company_name, website, city/state/address, category
+
+email, phone, first_name, last_name, title
+
+created_at, last_seen_at, sources (jsonb)
+
+company relation if available (companyId → company record name/domain)
+
+Handle missing fields gracefully (show “—” not errors).
+
+Add loading + error states (spinner + “Could not load contact”).
+
+Auth handling: if 401, silently refresh session + retry once; only then prompt login.
+
+Backend
+
+Ensure GET /api/contacts/:id works (UUID only) and returns 404 if not found.
+
+Ensure frontend uses the correct id (uuid), not company_name or something else.
+
+B) Export + Auth Guardrails (final pass)
+
+Add /api/debug/export-health (protected) returning:
+
+counts of jobs/items/contacts/reports
+
+how many export rows are produced for most recent completed job
+
+how many have website, bullets count, confidence distribution
+
+how many duplicates removed by export dedupe
+
+Export must be fetch + blob download (no redirects).
+
+On any 401 for API calls: refreshSession() + retry once silently.
+
+Never show raw Supabase/provider messages to users.
+
+If export would produce 0 usable rows, return an actionable message (or a CSV with one “reason” row).
+
+C) Dedupe proof
+
+Add a small test/fixture verifying:
+
+phone+email record blocks phone-only and email-only duplicates
+
+company+city duplicates removed deterministically
+Log dedupe stats during export.
+
+Acceptance criteria
+
+Clicking any contact opens a details view with real data
+
+Exports download reliably in Railway prod (200 + text/csv)
+
+No false “Session expired” when user is already logged in
+
+Dedupe works and is measurable (stats visible)
