@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { Users, Mail, Phone, Building2, Linkedin, Search, RefreshCw, AlertCircle, MapPin, Globe, Tag } from "lucide-react";
+import { Users, Mail, Phone, Building2, Linkedin, Search, RefreshCw, AlertCircle, MapPin, Globe, Tag, Download, Loader2 } from "lucide-react";
 import { useState } from "react";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -12,10 +13,45 @@ import type { Contact } from "@shared/schema";
 
 export default function ContactsPage() {
   const [search, setSearch] = useState("");
+  const [isExporting, setIsExporting] = useState(false);
+  const { toast } = useToast();
   
   const { data: contacts, isLoading, error, refetch } = useQuery<Contact[]>({
     queryKey: ["/api/contacts"],
   });
+
+  const handleExport = async (format: 'csv' | 'json') => {
+    setIsExporting(true);
+    try {
+      const response = await fetch(`/api/contacts/export?format=${format}`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+      
+      if (response.status === 401) {
+        throw new Error('Please log in to export data');
+      }
+      if (!response.ok) {
+        throw new Error(`Export failed (${response.status})`);
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `contacts-export.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast({ title: "Export Complete", description: "File downloaded successfully" });
+    } catch (error) {
+      console.error('Export error:', error);
+      toast({ title: "Export Failed", description: error instanceof Error ? error.message : 'Export failed', variant: "destructive" });
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const filteredContacts = contacts?.filter((contact) => {
     if (!search) return true;
@@ -107,6 +143,20 @@ export default function ContactsPage() {
                 data-testid="input-search-contacts"
               />
             </div>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => handleExport('csv')}
+              disabled={isExporting || !contacts?.length}
+              data-testid="button-export-contacts"
+            >
+              {isExporting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="mr-2 h-4 w-4" />
+              )}
+              {isExporting ? 'Exporting...' : 'Export CSV'}
+            </Button>
             <Button variant="outline" size="icon" onClick={() => refetch()} data-testid="button-refresh">
               <RefreshCw className="h-4 w-4" />
             </Button>

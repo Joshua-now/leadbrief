@@ -1069,6 +1069,68 @@ export async function registerRoutes(
     }
   });
 
+  // Export all contacts (CSV or JSON) - protected - MUST be before /api/contacts/:id
+  app.get("/api/contacts/export", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const format = (req.query.format as string) || 'csv';
+      const contacts = await storage.getContacts(500);
+      
+      if (format === 'csv') {
+        const headers = [
+          'first_name', 'last_name', 'email', 'phone', 'title',
+          'company_name', 'website', 'city', 'state', 'category',
+          'linkedin_url', 'data_quality_score'
+        ];
+        
+        const csvRows = [headers.join(',')];
+        
+        for (const contact of contacts) {
+          const row = [
+            escapeCSV(contact.firstName),
+            escapeCSV(contact.lastName),
+            escapeCSV(contact.email),
+            escapeCSV(contact.phone),
+            escapeCSV(contact.title),
+            escapeCSV(contact.companyName),
+            escapeCSV(contact.website),
+            escapeCSV(contact.city),
+            escapeCSV(contact.state),
+            escapeCSV(contact.category),
+            escapeCSV(contact.linkedinUrl),
+            contact.dataQualityScore?.toString() || '',
+          ];
+          csvRows.push(row.join(','));
+        }
+        
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename="contacts-export.csv"`);
+        res.send(csvRows.join('\n'));
+      } else {
+        res.json({
+          contacts: contacts.map((c: typeof contacts[0]) => ({
+            first_name: c.firstName,
+            last_name: c.lastName,
+            email: c.email,
+            phone: c.phone,
+            title: c.title,
+            company_name: c.companyName,
+            website: c.website,
+            city: c.city,
+            state: c.state,
+            category: c.category,
+            linkedin_url: c.linkedinUrl,
+            data_quality_score: c.dataQualityScore,
+          })),
+          count: contacts.length,
+          exportedAt: new Date().toISOString(),
+        });
+      }
+    } catch (error) {
+      console.error("Contacts export error:", error);
+      res.status(500).json({ error: "Export failed" });
+    }
+  });
+
   // Get single contact (protected)
   app.get("/api/contacts/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
