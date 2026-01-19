@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { FileText, Clock, CheckCircle2, XCircle, Loader2, AlertCircle, RefreshCw, RotateCcw, Download } from "lucide-react";
@@ -181,6 +182,8 @@ export default function JobsPage() {
                 job={job} 
                 onRetry={() => retryMutation.mutate(job.id)}
                 isRetrying={retryMutation.isPending}
+                onExportSuccess={() => toast({ title: "Export Complete", description: "File downloaded successfully" })}
+                onExportError={(error) => toast({ title: "Export Failed", description: error, variant: "destructive" })}
               />
             ))}
           </div>
@@ -190,7 +193,14 @@ export default function JobsPage() {
   );
 }
 
-function JobCard({ job, onRetry, isRetrying }: { job: BulkJob; onRetry: () => void; isRetrying: boolean }) {
+function JobCard({ job, onRetry, isRetrying, onExportSuccess, onExportError }: { 
+  job: BulkJob; 
+  onRetry: () => void; 
+  isRetrying: boolean;
+  onExportSuccess: () => void;
+  onExportError: (error: string) => void;
+}) {
+  const [isExporting, setIsExporting] = useState(false);
   const status = statusConfig[job.status || "pending"] || statusConfig.pending;
   const StatusIcon = status.icon;
   const progress = job.totalRecords
@@ -201,14 +211,21 @@ function JobCard({ job, onRetry, isRetrying }: { job: BulkJob; onRetry: () => vo
   const canExport = job.status === "complete" || job.status === "completed";
 
   const handleExport = async (format: 'csv' | 'json') => {
+    setIsExporting(true);
     try {
       const response = await fetch(`/api/jobs/${job.id}/export?format=${format}`, {
         method: 'GET',
         credentials: 'include',
       });
       
+      if (response.status === 401) {
+        throw new Error('Please log in to export data');
+      }
+      if (response.status === 404) {
+        throw new Error('Job not found');
+      }
       if (!response.ok) {
-        throw new Error('Export failed');
+        throw new Error(`Export failed (${response.status})`);
       }
       
       const blob = await response.blob();
@@ -220,8 +237,12 @@ function JobCard({ job, onRetry, isRetrying }: { job: BulkJob; onRetry: () => vo
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
+      onExportSuccess();
     } catch (error) {
       console.error('Export error:', error);
+      onExportError(error instanceof Error ? error.message : 'Export failed');
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -293,10 +314,15 @@ function JobCard({ job, onRetry, isRetrying }: { job: BulkJob; onRetry: () => vo
                 variant="outline"
                 size="sm"
                 onClick={() => handleExport('csv')}
+                disabled={isExporting}
                 data-testid={`button-export-${job.id}`}
               >
-                <Download className="mr-2 h-4 w-4" />
-                Export CSV
+                {isExporting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="mr-2 h-4 w-4" />
+                )}
+                {isExporting ? 'Exporting...' : 'Export CSV'}
               </Button>
             )}
             {canRetry && (

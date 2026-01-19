@@ -1,0 +1,136 @@
+🔧 Redbud Agent Prompt — Final UI Wiring & Export Hardening
+
+Context
+LeadBrief UI now shows export/download buttons on Jobs and Reports pages.
+However, at least one export button was not wired correctly, indicating inconsistent or partial wiring across the UI.
+
+We need to audit and fix ALL export/download actions, not just one button.
+
+🎯 Goals (Must All Be Met)
+
+Every export/download button works
+
+All buttons call the correct backend API
+
+No UI element silently fails
+
+UI handles auth + errors gracefully
+
+No API request returns HTML
+
+✅ Required Actions
+1️⃣ Audit ALL export/download buttons
+
+Locate and review every UI element that:
+
+Exports data
+
+Downloads CSV or JSON
+
+Uses file / download / export icons
+
+This includes:
+
+Jobs list row actions
+
+Job detail views
+
+Reports page exports (if present)
+
+Any hidden/secondary export buttons
+
+Ensure none are placeholders or no-ops.
+
+2️⃣ Standardize export behavior (single source of truth)
+
+All export buttons must call one of these patterns only:
+
+GET /api/bulk-jobs/:id/export?format=csv
+GET /api/bulk-jobs/:id/export?format=json
+
+
+Trigger downloads using one of:
+
+window.location.href = exportUrl;
+
+
+or
+
+fetch(exportUrl).then(blob → download)
+
+
+No inline mock data. No console-only handlers.
+
+3️⃣ Verify API routing consistency
+
+Confirm:
+
+All frontend API calls use the same base (/api)
+
+Requests reach the Express backend (not SPA fallback)
+
+Response headers are correct:
+
+CSV → text/csv
+
+JSON → application/json
+
+4️⃣ Add defensive UI feedback
+
+For every export button:
+
+Disable button while exporting
+
+Show loading state
+
+Show visible error if:
+
+401 Unauthorized
+
+404 Not Found
+
+500 Server error
+
+No silent failures.
+
+5️⃣ Reports page sanity check
+
+If Reports page exists:
+
+Confirm it is wired to real data
+
+If reports are generated from jobs, document and connect the flow
+
+If not implemented yet, disable or label clearly (no dead UI)
+
+6️⃣ Final verification checklist (must be tested)
+
+Click every export button manually
+
+Confirm:
+
+Network request fires
+
+Correct endpoint hit
+
+File downloads successfully
+
+Confirm no request returns HTML
+
+Confirm behavior works after page refresh
+
+✅ Acceptance Criteria
+
+Every visible export/download button works
+
+No button does nothing
+
+No API calls return <!DOCTYPE html>
+
+User can reliably export CSV/JSON for any completed job
+
+UI clearly communicates loading and errors
+
+Note:
+Backend, DB, and auth are already functional.
+This is strictly a UI wiring, routing, and polish pass.
