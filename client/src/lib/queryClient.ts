@@ -61,10 +61,10 @@ export const getQueryFn: <T>(options: {
     });
 
     if (res.status === 401) {
+      triggerSessionExpired();
       if (unauthorizedBehavior === "returnNull") {
         return null;
       }
-      triggerSessionExpired();
     }
 
     await throwIfResNotOk(res);
