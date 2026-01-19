@@ -1,0 +1,154 @@
+Many exports show a red “No data” message when the UI indicates there should be records/jobs.
+
+Some exports that do have data fail with 401 / Session expired.
+
+This is inconsistent across buttons/pages (Jobs/Reports/Contacts).
+
+Goal
+Make exports reliable and consistent:
+
+Correctly determine whether data exists
+
+Export succeeds whenever user is authenticated
+
+If auth is invalid, UI should re-auth gracefully (not random failures)
+
+No silent failures; errors must be actionable
+
+1) Diagnose + fix auth/session propagation (401 “session expired”)
+
+Audit ALL export requests and ensure they include auth correctly.
+
+Pick ONE auth approach and apply everywhere:
+
+Cookie-based session: all fetch calls must include:
+
+fetch(url, { credentials: "include" })
+
+
+JWT header-based: attach:
+
+Authorization: `Bearer ${token}`
+
+
+for exports too.
+
+Must verify:
+
+Requests are going to the same origin / correct backend domain (no cross-domain cookie loss).
+
+CORS + credentials config is correct if cross-origin.
+
+Supabase session refresh: on 401, attempt supabase.auth.refreshSession() then retry export once.
+
+UI behavior required:
+
+On 401: show toast “Session expired — re-authenticating…”
+
+Trigger refresh and retry once
+
+If still 401: redirect to login and show “Please log in again.”
+
+Add console logs for:
+
+endpoint url
+
+status code
+
+whether credentials/JWT were attached
+
+2) Fix “No data” logic (false negatives)
+
+Right now the UI/exports are incorrectly concluding “no data.”
+
+Required:
+
+Standardize what “has data” means (use the same definition in UI and backend).
+
+If export is based on bulk job items:
+
+confirm the export query is using correct jobId
+
+confirm it’s using correct status values (e.g. 'complete' vs 'completed')
+
+confirm it’s not filtering too strictly (ex: only status==='complete' but real rows are success or done)
+
+If export is based on reports table:
+
+confirm the report generation step actually writes rows
+
+confirm UI is querying the right table/source
+
+Backend must return structured “no data”
+Return a 200 with { reason: "...", counts: {...} } for JSON exports or a 204 with a clear message header, BUT do not treat random empty arrays as success.
+
+Add backend debug output (temporary):
+
+how many rows matched
+
+what filters applied
+
+what jobId/reportId used
+
+3) Add a shared Export Service (frontend) so buttons can’t drift
+
+Create a single exportService.ts used by all buttons with:
+
+consistent auth handling
+
+consistent error handling
+
+consistent download logic (prefer window.location.href for CSV to avoid blob/timeouts)
+
+standardized toasts + logs
+
+It should:
+
+log status + content-type
+
+if response is HTML → show error: “Routing issue: API returned HTML” and log first 200 chars.
+
+4) Improve error messaging so we can actually debug
+
+For any failed export toast, include:
+
+status code (401/404/500/504)
+
+short reason (Unauthorized / No data / Server error / Timeout)
+
+in console: response headers + first 200 chars of body
+
+No more generic “failed” messages.
+
+5) Verification checklist (must be done in production)
+
+For each export button (Jobs/Reports/Contacts):
+
+Click with valid session → 200 → file downloads
+
+Force session expired → click → auto refresh + retry → success OR redirect to login
+
+Confirm “no data” only appears when backend count is actually 0
+
+Confirm no requests return text/html for /api/*
+
+Acceptance Criteria
+
+Exports work reliably when logged in
+
+401 errors trigger refresh/retry or clean login flow
+
+“No data” is accurate and includes counts/reason
+
+All export buttons use the shared export service and behave the same way
+
+Super helpful: ask the agent to add one debug endpoint (optional)
+
+Add /api/debug/session (protected) returning:
+
+authenticated user id/email
+
+auth provider
+
+session expiry timestamp
+So we can confirm whether requests are actually authenticated.
