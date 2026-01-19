@@ -1314,13 +1314,20 @@ export async function registerRoutes(
         for (const contact of contacts) {
           let row: string[];
           if (scope === 'core') {
-            // Use centralized normalization for canonical fields
+            // Use normalizeContact() as single source of truth for canonical fields
+            const normalized = normalizeContact({
+              email: contact.email,
+              phone: contact.phone,
+              website: contact.website,
+              city: contact.city,
+              company_name: contact.companyName,
+            });
             row = [
-              escapeCSV(contact.companyName?.trim() || null),
-              escapeCSV(normalizeCity(contact.city)),
-              escapeCSV(normalizeEmail(contact.email)),
-              escapeCSV(normalizePhoneE164(contact.phone)),
-              escapeCSV(normalizeWebsiteUrl(contact.website)),
+              escapeCSV(normalized.company_name),
+              escapeCSV(normalized.city),
+              escapeCSV(normalized.email),
+              escapeCSV(normalized.phone),
+              escapeCSV(normalized.website),
               escapeCSV(contact.state?.trim() || null),
               escapeCSV(contact.category),
             ];
@@ -1361,13 +1368,20 @@ export async function registerRoutes(
         // JSON export
         const mappedContacts = contacts.map((c: typeof contacts[0]) => {
           if (scope === 'core') {
-            // Use centralized normalization for canonical fields
+            // Use normalizeContact() as single source of truth for canonical fields
+            const normalized = normalizeContact({
+              email: c.email,
+              phone: c.phone,
+              website: c.website,
+              city: c.city,
+              company_name: c.companyName,
+            });
             return {
-              company_name: c.companyName?.trim() ?? null,
-              city: normalizeCity(c.city),
-              email: normalizeEmail(c.email),
-              phone: normalizePhoneE164(c.phone),
-              website: normalizeWebsiteUrl(c.website),
+              company_name: normalized.company_name,
+              city: normalized.city,
+              email: normalized.email,
+              phone: normalized.phone,
+              website: normalized.website,
               state: c.state?.trim() ?? null,
               category: c.category ?? null,
             };
@@ -1870,17 +1884,25 @@ export async function registerRoutes(
         let filenamePrefix: string;
         
         if (scope === 'core') {
-          // Core export: Only canonical 7 fields (outreach-ready) with centralized normalization
+          // Core export: Only canonical 7 fields (outreach-ready) with centralized normalization via normalizeContact()
           headers = ['company_name', 'city', 'email', 'phone', 'website', 'state', 'category'];
           csvRows = [headers.join(',')];
           
           for (const record of exportRecords) {
+            // Run each record through normalizeContact() as single source of truth
+            const normalized = normalizeContact({
+              email: record.email,
+              phone: record.phone,
+              website: record.website as string | null,
+              city: record.city as string | null,
+              company_name: record.company_name as string | null,
+            });
             const row = [
-              escapeCSV(typeof record.company_name === 'string' ? record.company_name.trim() : null),
-              escapeCSV(normalizeCity(record.city as string | null)),
-              escapeCSV(normalizeEmail(record.email)),
-              escapeCSV(normalizePhoneE164(record.phone)),
-              escapeCSV(normalizeWebsiteUrl(record.website as string | null)),
+              escapeCSV(normalized.company_name),
+              escapeCSV(normalized.city),
+              escapeCSV(normalized.email),
+              escapeCSV(normalized.phone),
+              escapeCSV(normalized.website),
               escapeCSV(typeof record.state === 'string' ? record.state.trim() : null),
               escapeCSV(record.category as string | null),
             ];
@@ -1952,16 +1974,26 @@ export async function registerRoutes(
         console.log(`[Export Complete] job=${id}, format=json, scope=${scope}, rows=${exportRecords.length}, status=200, duration=${duration}ms, user=${userId}`);
         
         if (scope === 'core') {
-          // Core JSON export: Only canonical 7 fields with centralized normalization
-          const coreRecords = exportRecords.map(r => ({
-            company_name: typeof r.company_name === 'string' ? r.company_name.trim() : null,
-            city: normalizeCity(r.city as string | null),
-            email: normalizeEmail(r.email),
-            phone: normalizePhoneE164(r.phone),
-            website: normalizeWebsiteUrl(r.website as string | null),
-            state: typeof r.state === 'string' ? r.state.trim() : null,
-            category: r.category ?? null,
-          }));
+          // Core JSON export: Only canonical 7 fields with centralized normalization via normalizeContact()
+          const coreRecords = exportRecords.map(r => {
+            // Run each record through normalizeContact() as single source of truth
+            const normalized = normalizeContact({
+              email: r.email,
+              phone: r.phone,
+              website: r.website as string | null,
+              city: r.city as string | null,
+              company_name: r.company_name as string | null,
+            });
+            return {
+              company_name: normalized.company_name,
+              city: normalized.city,
+              email: normalized.email,
+              phone: normalized.phone,
+              website: normalized.website,
+              state: typeof r.state === 'string' ? r.state.trim() : null,
+              category: r.category ?? null,
+            };
+          });
           
           res.json({
             job: {
