@@ -48,7 +48,7 @@ export function registerAuthRoutes(app: Express): void {
         }
         
         console.log("[Auth] No valid Bearer token found");
-        return res.status(401).json({ message: "Unauthorized" });
+        return res.status(401).json({ error: "Unauthorized" });
       } catch (error) {
         console.error("[Auth] Error fetching Supabase user:", error);
         return res.status(500).json({ message: "Failed to fetch user" });
@@ -59,19 +59,21 @@ export function registerAuthRoutes(app: Express): void {
 
     if (!req.isAuthenticated || !req.isAuthenticated() || !user?.expires_at) {
       console.log(`[Auth] /api/auth/user 401 - isAuthenticated fn: ${!!req.isAuthenticated}, isAuthenticated(): ${req.isAuthenticated?.()}, hasUser: ${!!user}, expires_at: ${user?.expires_at}, sessionID: ${(req as any).sessionID?.slice(0, 8)}`);
-      return res.status(401).json({ message: "Unauthorized" });
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
     const now = Math.floor(Date.now() / 1000);
     if (now > user.expires_at && !user.refresh_token) {
-      return res.status(401).json({ message: "Unauthorized" });
+      console.log(`[Auth] /api/auth/user 401 - Token expired, no refresh token`);
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
     try {
       const userId = user?.claims?.sub || user?.id;
       
       if (!userId) {
-        return res.status(401).json({ message: "Unauthorized" });
+        console.log(`[Auth] /api/auth/user 401 - No userId in claims`);
+        return res.status(401).json({ error: "Unauthorized" });
       }
       
       const dbUser = await authStorage.getUser(userId);

@@ -165,6 +165,62 @@ export async function registerRoutes(
       sessionCheckedAt: new Date().toISOString(),
     });
   });
+  
+  // Debug whoami endpoint - detailed auth diagnostics (does not require auth)
+  app.get("/api/debug/whoami", async (req: Request, res: Response) => {
+    const authHeader = req.headers.authorization;
+    const hasAuthHeader = !!authHeader;
+    const hasBearerToken = authHeader?.startsWith('Bearer ') || false;
+    const hasSession = !!(req as any).session;
+    const hasPassportUser = !!(req as any).user;
+    const sessionId = (req as any).sessionID?.slice(0, 8) || null;
+    const activeProvider = getActiveAuthProvider();
+    
+    let tokenStatus = 'no_token';
+    let userId: string | null = null;
+    let email: string | null = null;
+    
+    // Check Bearer token if present
+    if (hasBearerToken && authHeader) {
+      const token = authHeader.slice(7);
+      try {
+        const { verifySupabaseToken } = await import('./lib/supabase');
+        const result = await verifySupabaseToken(token);
+        if (result) {
+          tokenStatus = 'valid';
+          userId = result.user.id;
+          email = result.user.email || null;
+        } else {
+          tokenStatus = 'invalid_or_expired';
+        }
+      } catch (e: any) {
+        tokenStatus = `error: ${e.message}`;
+      }
+    }
+    
+    // Check session user if present (Replit auth)
+    const sessionUser = (req as any).user;
+    if (sessionUser) {
+      userId = sessionUser.id || sessionUser.claims?.sub || null;
+      email = sessionUser.email || sessionUser.claims?.email || null;
+      tokenStatus = sessionUser.expires_at ? 
+        (Date.now() / 1000 <= sessionUser.expires_at ? 'session_valid' : 'session_expired') :
+        'session_no_expiry';
+    }
+    
+    res.json({
+      activeProvider,
+      hasAuthHeader,
+      hasBearerToken,
+      hasSession,
+      hasPassportUser,
+      sessionIdPrefix: sessionId,
+      tokenStatus,
+      userId,
+      email,
+      checkedAt: new Date().toISOString(),
+    });
+  });
 
   // Final verification endpoint - comprehensive system check
   // Tests health, ready, intake auth enforcement (with real HTTP calls), and DB write

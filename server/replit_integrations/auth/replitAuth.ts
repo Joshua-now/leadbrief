@@ -112,10 +112,7 @@ export async function setupAuth(app: Express) {
     console.log("[Auth] Setting up Supabase Auth routes (stateless JWT-only)");
     
     app.get("/api/login", (_req, res) => {
-      res.json({ 
-        provider: 'supabase',
-        message: 'Use the frontend login form to authenticate with Supabase'
-      });
+      res.redirect('/login');
     });
     
     // Token verification endpoint - no session storage, just validates and upserts user
@@ -323,9 +320,12 @@ export const isAuthenticated: RequestHandler = async (req: Request, res: Respons
         };
         return next();
       }
+      console.log(`[Auth] 401 - Bearer token invalid or expired`);
+    } else {
+      console.log(`[Auth] 401 - No Bearer token, header: ${authHeader ? 'present but wrong format' : 'missing'}`);
     }
     
-    return res.status(401).json({ message: "Unauthorized" });
+    return res.status(401).json({ error: "Unauthorized" });
   }
   
   // Replit auth check
@@ -333,7 +333,7 @@ export const isAuthenticated: RequestHandler = async (req: Request, res: Respons
 
   if (!req.isAuthenticated || !req.isAuthenticated() || !user?.expires_at) {
     console.log(`[Auth] 401 - isAuthenticated: ${!!req.isAuthenticated}, isAuthenticated(): ${req.isAuthenticated?.()}, hasUser: ${!!user}, expires_at: ${user?.expires_at}`);
-    return res.status(401).json({ message: "Unauthorized" });
+    return res.status(401).json({ error: "Unauthorized" });
   }
 
   const now = Math.floor(Date.now() / 1000);
@@ -343,7 +343,8 @@ export const isAuthenticated: RequestHandler = async (req: Request, res: Respons
 
   const refreshToken = user.refresh_token;
   if (!refreshToken) {
-    return res.status(401).json({ message: "Unauthorized" });
+    console.log(`[Auth] 401 - Token expired, no refresh token available`);
+    return res.status(401).json({ error: "Unauthorized" });
   }
 
   try {
@@ -353,14 +354,16 @@ export const isAuthenticated: RequestHandler = async (req: Request, res: Respons
     const updateUserSession = (app as any).__updateUserSession;
     
     if (!getOidcConfig || !client || !updateUserSession) {
-      return res.status(401).json({ message: "Unauthorized" });
+      console.log(`[Auth] 401 - OIDC config not available for token refresh`);
+      return res.status(401).json({ error: "Unauthorized" });
     }
     
     const config = await getOidcConfig();
     const tokenResponse = await client.refreshTokenGrant(config, refreshToken);
     updateUserSession(user, tokenResponse);
     return next();
-  } catch (error) {
-    return res.status(401).json({ message: "Unauthorized" });
+  } catch (error: any) {
+    console.log(`[Auth] 401 - Token refresh failed: ${error?.message || error}`);
+    return res.status(401).json({ error: "Unauthorized" });
   }
 };
