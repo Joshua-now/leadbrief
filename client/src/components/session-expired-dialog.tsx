@@ -9,10 +9,25 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { onSessionExpired, clearSessionExpired } from "@/lib/session-manager";
-import { isSupabaseConfigured } from "@/lib/supabase";
+import { ensureSupabaseConfigured } from "@/lib/supabase";
 
 export function SessionExpiredDialog() {
   const [isOpen, setIsOpen] = useState(false);
+  const [authProvider, setAuthProvider] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Fetch auth config to determine provider
+    fetch('/api/auth/config', { cache: 'no-store' })
+      .then(res => res.json())
+      .then(data => {
+        console.log('[Auth] SessionExpiredDialog detected provider:', data.provider);
+        setAuthProvider(data.provider);
+      })
+      .catch(err => {
+        console.error('[Auth] Failed to fetch auth config:', err);
+        setAuthProvider('replit'); // Default to replit if config fetch fails
+      });
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onSessionExpired(() => {
@@ -22,15 +37,22 @@ export function SessionExpiredDialog() {
     return unsubscribe;
   }, []);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     clearSessionExpired();
-    // For Supabase auth, go to the frontend login page
-    // For Replit auth, use the API endpoint which redirects to OIDC
-    if (isSupabaseConfigured()) {
-      window.location.href = "/login";
-    } else {
-      window.location.href = "/api/login";
-    }
+    
+    // Determine login route based on auth provider
+    const isSupabase = await ensureSupabaseConfigured();
+    const loginPath = isSupabase ? "/login" : "/api/login";
+    
+    console.log('[Auth] SessionExpiredDialog login redirect:', { 
+      authProvider, 
+      isSupabaseConfigured: isSupabase,
+      loginPath 
+    });
+    
+    // For Replit auth, use window.location.href to trigger server-side OIDC
+    // For Supabase auth, also use window.location.href to ensure clean state
+    window.location.href = loginPath;
   };
 
   const handleClose = () => {

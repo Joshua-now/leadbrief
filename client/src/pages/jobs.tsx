@@ -66,7 +66,8 @@ export default function JobsPage() {
   const { data: jobs, isLoading, error, refetch } = useQuery<BulkJob[]>({
     queryKey: ["/api/jobs", filter],
     queryFn: async () => {
-      const response = await fetch(`/api/jobs?filter=${filter}`, { credentials: 'include' });
+      const { apiGet } = await import("@/lib/apiClient");
+      const response = await apiGet(`/api/jobs?filter=${filter}`);
       if (!response.ok) throw new Error(`${response.status}`);
       return response.json();
     },

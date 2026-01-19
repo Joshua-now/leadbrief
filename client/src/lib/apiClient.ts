@@ -53,21 +53,29 @@ async function makeRequest(url: string, options: ApiRequestOptions = {}): Promis
 export async function apiRequest(url: string, options: ApiRequestOptions = {}): Promise<Response> {
   let response = await makeRequest(url, options);
   
-  if (response.status === 401 && !options.skipAuth && isSupabaseConfigured()) {
-    console.log('[API] Got 401, attempting silent refresh...');
+  if (response.status === 401 && !options.skipAuth) {
+    console.log('[API] Got 401 on', url);
     
-    const refreshed = await refreshSession();
-    
-    if (refreshed) {
-      console.log('[API] Session refreshed, retrying request...');
-      response = await makeRequest(url, options);
+    if (isSupabaseConfigured()) {
+      // For Supabase, try silent refresh first
+      console.log('[API] Supabase configured, attempting silent refresh...');
+      const refreshed = await refreshSession();
       
-      if (response.status === 401) {
-        console.log('[API] Still 401 after refresh, session truly expired');
+      if (refreshed) {
+        console.log('[API] Session refreshed, retrying request...');
+        response = await makeRequest(url, options);
+        
+        if (response.status === 401) {
+          console.log('[API] Still 401 after refresh, session truly expired');
+          triggerSessionExpired();
+        }
+      } else {
+        console.log('[API] Refresh failed, session expired');
         triggerSessionExpired();
       }
     } else {
-      console.log('[API] Refresh failed, session expired');
+      // For Replit Auth, 401 means session expired - trigger login
+      console.log('[API] Replit Auth session expired, triggering login');
       triggerSessionExpired();
     }
   }
