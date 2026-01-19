@@ -92,6 +92,35 @@ export function normalizeCompany(company: string | null | undefined): string | n
   return company.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
+export function normalizeCity(city: string | null | undefined): string | null {
+  if (!city || typeof city !== 'string') return null;
+  const trimmed = city.trim().replace(/\s+/g, ' ');
+  if (!trimmed) return null;
+  // Titlecase: capitalize first letter of each word
+  return trimmed
+    .toLowerCase()
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+export function normalizePhoneE164(phone: string | null | undefined, defaultCountry = '1'): string | null {
+  if (!phone || typeof phone !== 'string') return null;
+  
+  let digits = phone.replace(/\D/g, '');
+  
+  // Handle US numbers
+  if (digits.length === 10) {
+    digits = defaultCountry + digits; // Add US country code
+  } else if (digits.length === 11 && digits.startsWith('1')) {
+    // Already has US country code
+  } else if (digits.length < 10) {
+    return null; // Too short
+  }
+  
+  return '+' + digits;
+}
+
 export function computeSourceHash(
   emailNorm: string | null,
   domainNorm: string | null,

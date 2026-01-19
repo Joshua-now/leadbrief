@@ -1,6 +1,20 @@
 import { z } from 'zod';
 import Papa from 'papaparse';
-import { normalizePhone as normPhone, normalizeCompany as normCompany } from './normalize';
+import { normalizePhone as normPhone, normalizeCompany as normCompany, normalizeCity, normalizePhoneE164, normalizeWebsiteUrl, normalizeEmail as normEmail } from './normalize';
+
+// Helper to merge two contact records, keeping non-empty values
+function mergeContacts(existing: ParsedContact, incoming: Partial<ParsedContact>): ParsedContact {
+  const merged = { ...existing };
+  for (const key of Object.keys(incoming) as (keyof ParsedContact)[]) {
+    const incomingVal = incoming[key];
+    const existingVal = existing[key];
+    // Fill missing values from incoming
+    if ((!existingVal || existingVal === '') && incomingVal && incomingVal !== '') {
+      (merged as any)[key] = incomingVal;
+    }
+  }
+  return merged;
+}
 
 // Constants for guard rails
 export const IMPORT_LIMITS = {
@@ -90,9 +104,11 @@ export class BulkInputHandler {
     const errors: ImportResult['errors'] = [];
     const warnings: string[] = [];
     const invalidRows = new Set<number>();
-    const seenEmails = new Set<string>();
-    const seenPhones = new Set<string>();
-    const seenCompanyCities = new Set<string>();
+    
+    // Track seen identifiers with indexes for merge-based dedup
+    const emailToIndex = new Map<string, number>();
+    const phoneToIndex = new Map<string, number>();
+    const companyCityToIndex = new Map<string, number>();
 
     // Guard rail: Check content size
     const sizeInMB = Buffer.byteLength(csvContent, 'utf8') / (1024 * 1024);
@@ -138,45 +154,68 @@ export class BulkInputHandler {
       const rowNum = idx + 2;
       const mapped = this.mapRow(row);
       
-      // Self-healing: Try to normalize common issues
+      // Self-healing: Normalize canonical fields
       if (mapped.email) {
         mapped.email = normalizeEmail(mapped.email);
       }
       if (mapped.phone) {
-        mapped.phone = normalizePhone(mapped.phone);
+        const e164 = normalizePhoneE164(mapped.phone);
+        mapped.phone = e164 || normalizePhone(mapped.phone);
+      }
+      if (mapped.websiteUrl) {
+        const normalizedUrl = normalizeWebsiteUrl(mapped.websiteUrl);
+        mapped.websiteUrl = normalizedUrl || undefined;
+      }
+      if (mapped.city) {
+        const normalizedCity = normalizeCity(mapped.city);
+        mapped.city = normalizedCity || undefined;
       }
       
-      // Deduplicate within import: phone_norm > email > company+city
+      // Deduplicate with NO-LOSS MERGE: phone_norm > email > company+city
       const phoneNorm = mapped.phone ? normPhone(mapped.phone) : null;
       const companyNorm = mapped.company ? normCompany(mapped.company) : null;
       const cityNorm = mapped.city ? mapped.city.toLowerCase().trim() : null;
       const companyCityKey = companyNorm && cityNorm ? `${companyNorm}|${cityNorm}` : null;
       
-      if (mapped.email && seenEmails.has(mapped.email)) {
-        warnings.push(`Row ${rowNum}: Duplicate email "${mapped.email}" - skipped`);
-        return;
+      // Check if this is a duplicate and find the index of the existing record to merge
+      let existingIndex: number | undefined;
+      let mergeReason: string | undefined;
+      
+      if (mapped.email && emailToIndex.has(mapped.email)) {
+        existingIndex = emailToIndex.get(mapped.email);
+        mergeReason = `email "${mapped.email}"`;
+      } else if (phoneNorm && phoneToIndex.has(phoneNorm)) {
+        existingIndex = phoneToIndex.get(phoneNorm);
+        mergeReason = `phone "${mapped.phone}"`;
+      } else if (companyCityKey && companyCityToIndex.has(companyCityKey)) {
+        existingIndex = companyCityToIndex.get(companyCityKey);
+        mergeReason = `company+city "${mapped.company}, ${mapped.city}"`;
       }
-      if (phoneNorm && seenPhones.has(phoneNorm)) {
-        warnings.push(`Row ${rowNum}: Duplicate phone "${mapped.phone}" - skipped`);
-        return;
-      }
-      if (companyCityKey && seenCompanyCities.has(companyCityKey)) {
-        warnings.push(`Row ${rowNum}: Duplicate company+city "${mapped.company}, ${mapped.city}" - skipped`);
+      
+      // If duplicate found, merge into existing record instead of skipping
+      if (existingIndex !== undefined && existingIndex < records.length) {
+        const existingRecord = records[existingIndex];
+        const merged = mergeContacts(existingRecord, mapped);
+        records[existingIndex] = merged;
+        warnings.push(`Row ${rowNum}: Duplicate by ${mergeReason} - merged`);
         return;
       }
       
       const result = ContactSchema.safeParse(mapped);
 
       if (result.success) {
+        const recordIndex = records.length;
         records.push(result.data);
+        
+        // Track all identifiers for this record for future merges
         if (result.data.email) {
-          seenEmails.add(result.data.email);
+          emailToIndex.set(result.data.email, recordIndex);
         }
         if (phoneNorm) {
-          seenPhones.add(phoneNorm);
+          phoneToIndex.set(phoneNorm, recordIndex);
         }
         if (companyCityKey) {
-          seenCompanyCities.add(companyCityKey);
+          companyCityToIndex.set(companyCityKey, recordIndex);
         }
       } else {
         invalidRows.add(rowNum);
@@ -261,9 +300,9 @@ export class BulkInputHandler {
     const records: ParsedContact[] = [];
     const errors: ImportResult['errors'] = [];
     const warnings: string[] = [];
-    const seenEmails = new Set<string>();
-    const seenPhones = new Set<string>();
-    const seenCompanyCities = new Set<string>();
+    const emailToIndex = new Map<string, number>();
+    const phoneToIndex = new Map<string, number>();
+    const companyCityToIndex = new Map<string, number>();
     let invalidCount = 0;
 
     // Guard rail: Check content size
@@ -288,45 +327,68 @@ export class BulkInputHandler {
       data.forEach((item, idx) => {
         const mapped = this.normalizeFields(item);
         
-        // Self-healing: Normalize fields
+        // Self-healing: Normalize canonical fields
         if (mapped.email) {
           mapped.email = normalizeEmail(mapped.email);
         }
         if (mapped.phone) {
-          mapped.phone = normalizePhone(mapped.phone);
+          const e164 = normalizePhoneE164(mapped.phone);
+          mapped.phone = e164 || normalizePhone(mapped.phone);
+        }
+        if (mapped.websiteUrl) {
+          const normalizedUrl = normalizeWebsiteUrl(mapped.websiteUrl);
+          mapped.websiteUrl = normalizedUrl || undefined;
+        }
+        if (mapped.city) {
+          const normalizedCity = normalizeCity(mapped.city);
+          mapped.city = normalizedCity || undefined;
         }
 
-        // Deduplicate within import: phone_norm > email > company+city
+        // Deduplicate with NO-LOSS MERGE: phone_norm > email > company+city
         const phoneNorm = mapped.phone ? normPhone(mapped.phone) : null;
         const companyNorm = mapped.company ? normCompany(mapped.company) : null;
         const cityNorm = mapped.city ? mapped.city.toLowerCase().trim() : null;
         const companyCityKey = companyNorm && cityNorm ? `${companyNorm}|${cityNorm}` : null;
         
-        if (mapped.email && seenEmails.has(mapped.email)) {
-          warnings.push(`Record ${idx + 1}: Duplicate email "${mapped.email}" - skipped`);
-          return;
+        // Check if this is a duplicate and find the index of the existing record to merge
+        let existingIndex: number | undefined;
+        let mergeReason: string | undefined;
+        
+        if (mapped.email && emailToIndex.has(mapped.email)) {
+          existingIndex = emailToIndex.get(mapped.email);
+          mergeReason = `email "${mapped.email}"`;
+        } else if (phoneNorm && phoneToIndex.has(phoneNorm)) {
+          existingIndex = phoneToIndex.get(phoneNorm);
+          mergeReason = `phone`;
+        } else if (companyCityKey && companyCityToIndex.has(companyCityKey)) {
+          existingIndex = companyCityToIndex.get(companyCityKey);
+          mergeReason = `company+city`;
         }
-        if (phoneNorm && seenPhones.has(phoneNorm)) {
-          warnings.push(`Record ${idx + 1}: Duplicate phone - skipped`);
-          return;
-        }
-        if (companyCityKey && seenCompanyCities.has(companyCityKey)) {
-          warnings.push(`Record ${idx + 1}: Duplicate company+city - skipped`);
+        
+        // If duplicate found, merge into existing record instead of skipping
+        if (existingIndex !== undefined && existingIndex < records.length) {
+          const existingRecord = records[existingIndex];
+          const merged = mergeContacts(existingRecord, mapped);
+          records[existingIndex] = merged;
+          warnings.push(`Record ${idx + 1}: Duplicate by ${mergeReason} - merged`);
           return;
         }
 
         const result = ContactSchema.safeParse(mapped);
 
         if (result.success) {
+          const recordIndex = records.length;
           records.push(result.data);
+          
+          // Track all identifiers for this record for future merges
           if (result.data.email) {
-            seenEmails.add(result.data.email);
+            emailToIndex.set(result.data.email, recordIndex);
           }
           if (phoneNorm) {
-            seenPhones.add(phoneNorm);
+            phoneToIndex.set(phoneNorm, recordIndex);
           }
           if (companyCityKey) {
-            seenCompanyCities.add(companyCityKey);
+            companyCityToIndex.set(companyCityKey, recordIndex);
           }
         } else {
           invalidCount++;
