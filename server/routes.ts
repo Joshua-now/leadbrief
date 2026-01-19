@@ -151,6 +151,21 @@ export async function registerRoutes(
     }
   });
 
+  // Debug session endpoint - shows current auth state for debugging
+  app.get("/api/debug/session", isAuthenticated, async (req: Request, res: Response) => {
+    const user = req.user as any;
+    
+    res.json({
+      authenticated: true,
+      userId: user?.id || user?.claims?.sub || null,
+      email: user?.email || user?.claims?.email || null,
+      authProvider: getActiveAuthProvider(),
+      expiresAt: user?.expires_at ? new Date(user.expires_at * 1000).toISOString() : null,
+      hasRefreshToken: !!user?.refresh_token,
+      sessionCheckedAt: new Date().toISOString(),
+    });
+  });
+
   // Final verification endpoint - comprehensive system check
   // Tests health, ready, intake auth enforcement (with real HTTP calls), and DB write
   // Cleans up only test records it creates
